@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel,
-    apiKey: String
 ) {
     val messages by viewModel.messages.collectAsState()
     val loading by viewModel.loading.collectAsState()
@@ -115,7 +114,6 @@ fun ChatScreen(
                 onClick = {
 
                     viewModel.askAI(
-                        apiKey = apiKey,
                         question = input
                     )
 
