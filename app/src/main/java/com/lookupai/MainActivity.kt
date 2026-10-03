@@ -6,7 +6,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -33,35 +35,71 @@ fun LookupAIApp() {
         mutableStateOf("")
     }
 
+    var connected by remember {
+        mutableStateOf(false)
+    }
+
     val viewModel = remember {
         ChatViewModel()
     }
 
     MaterialTheme {
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        if (!connected) {
 
-            Text(
-                text = "Lookup AI",
-                style = MaterialTheme.typography.headlineLarge
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
 
-            OutlinedTextField(
-                value = apiKey,
-                onValueChange = {
-                    apiKey = it
-                },
-                label = {
-                    Text("API key")
-                },
-                visualTransformation =
-                    PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxSize()
+                Text(
+                    text = "Lookup AI",
+                    style = MaterialTheme.typography.headlineLarge
+                )
+
+                Text(
+                    text = "Connect your AI",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(
+                        top = 8.dp,
+                        bottom = 20.dp
+                    )
+                )
+
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = {
+                        apiKey = it
+                    },
+                    label = {
+                        Text("API key")
+                    },
+                    visualTransformation =
+                        PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Button(
+                    onClick = {
+                        connected = true
+                    },
+                    enabled = apiKey.isNotBlank(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
+                ) {
+                    Text("Continue")
+                }
+            }
+
+        } else {
+
+            ChatScreen(
+                viewModel = viewModel,
+                apiKey = apiKey
             )
         }
     }
