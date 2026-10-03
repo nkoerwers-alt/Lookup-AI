@@ -16,21 +16,23 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ChatScreen(
-    viewModel: ChatViewModel,
-) {
+fun ChatScreen(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
 
-    var input by remember {
-        mutableStateOf("")
-    }
+    var input by remember { mutableStateOf("") }
 
     val listState = rememberLazyListState()
 
@@ -45,36 +47,29 @@ fun ChatScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-
         Text(
             text = "Lookup AI",
             style = MaterialTheme.typography.headlineMedium
         )
 
-        Spacer(
-            modifier = Modifier.height(12.dp)
-        )
+        Spacer(modifier = Modifier.height(12.dp))
 
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-
             items(messages) { message ->
-
                 MessageBubble(message)
             }
 
             if (loading) {
-
                 item {
                     CircularProgressIndicator()
                 }
             }
 
             if (error != null) {
-
                 item {
                     Text(
                         text = error ?: "",
@@ -84,39 +79,27 @@ fun ChatScreen(
             }
         }
 
-        Spacer(
-            modifier = Modifier.height(10.dp)
-        )
+        Spacer(modifier = Modifier.height(10.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth()
         ) {
-
             OutlinedTextField(
                 value = input,
-                onValueChange = {
-                    input = it
-                },
+                onValueChange = { input = it },
                 modifier = Modifier.weight(1f),
                 placeholder = {
                     Text("Ask anything...")
-                }
+                },
+                singleLine = true
             )
 
-            Spacer(
-                modifier = Modifier.padding(4.dp)
-            )
+            Spacer(modifier = Modifier.padding(4.dp))
 
             Button(
-                enabled = input.isNotBlank() &&
-                        apiKey.isNotBlank() &&
-                        !loading,
+                enabled = input.isNotBlank() && !loading,
                 onClick = {
-
-                    viewModel.askAI(
-                        question = input
-                    )
-
+                    viewModel.askAI(input)
                     input = ""
                 }
             ) {
