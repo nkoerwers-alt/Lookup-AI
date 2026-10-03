@@ -18,44 +18,27 @@ class ChatViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    fun askAI(apiKey: String, question: String) {
-
-        if (question.isBlank() || apiKey.isBlank() || _loading.value) {
-            return
-        }
+    fun askAI(question: String) {
+        if (question.isBlank() || _loading.value) return
 
         _error.value = null
-
-        _messages.value = _messages.value +
-                ChatMessage(
-                    text = question,
-                    isUser = true
-                )
+        _messages.value =
+            _messages.value + ChatMessage(text = question, isUser = true)
 
         _loading.value = true
 
         viewModelScope.launch {
-
             try {
+                val response = AIClient.ask(question)
 
-                val response = AIClient.ask(
-                    apiKey = apiKey,
-                    question = question
-                )
-
-                _messages.value = _messages.value +
-                        ChatMessage(
-                            text = response,
-                            isUser = false
-                        )
-
+                _messages.value =
+                    _messages.value + ChatMessage(
+                        text = response,
+                        isUser = false
+                    )
             } catch (e: Exception) {
-
-                _error.value =
-                    e.message ?: "Something went wrong."
-
+                _error.value = e.message ?: "Something went wrong."
             } finally {
-
                 _loading.value = false
             }
         }
