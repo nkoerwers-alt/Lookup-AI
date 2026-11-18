@@ -14,22 +14,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun MessageBubble(message: Message) {
+fun MessageBubble(message: ChatMessage) {
     val userColor = Color(0xFF7650D9)
     val aiColor = Color(0xFF191922)
     val textColor = Color(0xFFF4F2FA)
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isUser)
-            Arrangement.End else Arrangement.Start,
+        horizontalArrangement = if (message.isUser) {
+            Arrangement.End
+        } else {
+            Arrangement.Start
+        },
         verticalAlignment = Alignment.Top
     ) {
         if (!message.isUser) {
             Box(
                 modifier = Modifier
                     .padding(end = 8.dp)
-                    .size(30.dp)
+                    .size(32.dp)
                     .background(
                         Color(0xFF9565FF),
                         RoundedCornerShape(10.dp)
@@ -37,7 +40,7 @@ fun MessageBubble(message: Message) {
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    "F",
+                    text = "F",
                     color = Color.White,
                     fontWeight = FontWeight.Bold
                 )
@@ -60,7 +63,7 @@ fun MessageBubble(message: Message) {
         ) {
             if (!message.isUser) {
                 Text(
-                    "Fenn AI",
+                    text = "Fenn AI",
                     color = Color(0xFFB99CFF),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold
