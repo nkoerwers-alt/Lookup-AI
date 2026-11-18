@@ -15,7 +15,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Dark Android system bars
+        AIClient.initialize(applicationContext)
+
         window.statusBarColor = Color.BLACK
         window.navigationBarColor = Color.BLACK
 
@@ -23,7 +24,6 @@ class MainActivity : ComponentActivity() {
             window.isNavigationBarContrastEnforced = false
         }
 
-        // White system icons on dark backgrounds
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = 0
 
@@ -38,8 +38,6 @@ fun LookupAIApp() {
     val viewModel = remember { ChatViewModel() }
 
     MaterialTheme {
-        ChatScreen(
-            viewModel = viewModel
-        )
+        ChatScreen(viewModel = viewModel)
     }
 }
