@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LookupAI"
+rootProject.name = "Fenn"
 include(":app")
