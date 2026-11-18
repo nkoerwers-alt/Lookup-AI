@@ -120,7 +120,6 @@ async function groq(env, messages) {
 }
 
 async function saveMemories(env, userId, question) {
-  // Never extract memories from requests that explicitly ask not to save them.
   if (/\b(don't remember|do not remember|don't save|do not save|forget this)\b/i.test(question)) {
     return;
   }
@@ -198,7 +197,7 @@ Maximum 3 memories. Each memory must be under 240 characters.`
     `).bind(userId, userId).run();
 
   } catch {
-    // Memory extraction failure must not break the chat response.
+    // Memory extraction failure must not break chat.
   }
 }
 
@@ -208,15 +207,17 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    if (!env.DB || !env.GROQ_API_KEY || !env.SESSION_SECRET) {
-      return json({ error: "Backend configuration is incomplete." }, 500);
-    }
-
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "");
 
     try {
-      // Create a new anonymous user identity.
+      if (!env.DB || !env.SESSION_SECRET) {
+        return json({
+          error: "Database or session configuration is missing."
+        }, 500);
+      }
+
+      // Create anonymous session
       if (path === "/session" && request.method === "POST") {
         const userId = crypto.randomUUID();
 
@@ -229,7 +230,7 @@ export default {
         return json({ token });
       }
 
-      // All remaining endpoints require a valid signed session.
+      // Authenticate all remaining routes
       const authorization = request.headers.get("Authorization") || "";
       const token = authorization.startsWith("Bearer ")
         ? authorization.slice(7)
@@ -241,7 +242,7 @@ export default {
         return json({ error: "Invalid or expired session." }, 401);
       }
 
-      // Read saved memories.
+      // Load memories
       if (path === "/memory" && request.method === "GET") {
         const result = await env.DB.prepare(
           "SELECT id, content, category, created_at FROM memories WHERE user_id = ? ORDER BY rowid DESC LIMIT 50"
@@ -250,7 +251,7 @@ export default {
         return json({ memories: result.results || [] });
       }
 
-      // Delete all memories belonging to this user.
+      // Delete memories
       if (path === "/memory" && request.method === "DELETE") {
         await env.DB.prepare(
           "DELETE FROM memories WHERE user_id = ?"
@@ -259,8 +260,83 @@ export default {
         return json({ success: true });
       }
 
+      // List conversations
+      if (path === "/conversations" && request.method === "GET") {
+        const result = await env.DB.prepare(
+          `SELECT id, title, created_at
+           FROM conversations
+           WHERE user_id = ?
+           ORDER BY created_at DESC`
+        ).bind(userId).all();
+
+        return json({ conversations: result.results || [] });
+      }
+
+      // Load a conversation
+      if (
+        path.startsWith("/conversations/") &&
+        request.method === "GET"
+      ) {
+        const id = decodeURIComponent(
+          path.slice("/conversations/".length)
+        );
+
+        const conversation = await env.DB.prepare(
+          "SELECT id, title FROM conversations WHERE id = ? AND user_id = ?"
+        ).bind(id, userId).first();
+
+        if (!conversation) {
+          return json({ error: "Conversation not found." }, 404);
+        }
+
+        const result = await env.DB.prepare(
+          `SELECT role, content, created_at
+           FROM messages
+           WHERE conversation_id = ?
+           ORDER BY rowid ASC`
+        ).bind(id).all();
+
+        return json({
+          conversation,
+          messages: result.results || []
+        });
+      }
+
+      // Delete a conversation
+      if (
+        path.startsWith("/conversations/") &&
+        request.method === "DELETE"
+      ) {
+        const id = decodeURIComponent(
+          path.slice("/conversations/".length)
+        );
+
+        const conversation = await env.DB.prepare(
+          "SELECT id FROM conversations WHERE id = ? AND user_id = ?"
+        ).bind(id, userId).first();
+
+        if (!conversation) {
+          return json({ error: "Conversation not found." }, 404);
+        }
+
+        await env.DB.prepare(
+          "DELETE FROM messages WHERE conversation_id = ?"
+        ).bind(id).run();
+
+        await env.DB.prepare(
+          "DELETE FROM conversations WHERE id = ? AND user_id = ?"
+        ).bind(id, userId).run();
+
+        return json({ success: true });
+      }
+
+      // Chat endpoint
       if (path !== "/chat" || request.method !== "POST") {
         return json({ error: "Endpoint not found." }, 404);
+      }
+
+      if (!env.GROQ_API_KEY) {
+        return json({ error: "Groq API key is missing." }, 500);
       }
 
       const body = await request.json();
@@ -282,7 +358,6 @@ export default {
         return json({ error: "Invalid conversation ID." }, 400);
       }
 
-      // Handle an explicit request to erase saved memories.
       if (/\b(forget all my memories|delete all my memories|erase all my memories)\b/i.test(question)) {
         await env.DB.prepare(
           "DELETE FROM memories WHERE user_id = ?"
@@ -331,7 +406,6 @@ export default {
 Be accurate, thoughtful, clear, and natural.
 Never invent facts. If you are unsure, say so.
 When writing code, use Markdown fenced code blocks with a language label.
-For example, use triple backticks followed by kotlin, javascript, python, or another language.
 Keep explanations outside the code blocks.`
         }
       ];
@@ -365,14 +439,12 @@ Keep explanations outside the code blocks.`
         answer
       ).run();
 
-      // Save useful memories without making memory failure break the answer.
       await saveMemories(env, userId, question);
 
       return json({
         answer,
         conversationId
       });
-
     } catch (error) {
       return json({
         error: error.message || "Backend error."
