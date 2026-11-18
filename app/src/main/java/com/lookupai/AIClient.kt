@@ -3,6 +3,7 @@ package com.lookupai
 
 import android.content.Context
 import org.json.JSONObject
+import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
@@ -11,6 +12,17 @@ import java.net.URL
 data class AIReply(
     val answer: String,
     val conversationId: String
+)
+
+data class SavedConversation(
+    val id: String,
+    val title: String,
+    val createdAt: String
+)
+
+data class LoadedConversation(
+    val id: String,
+    val messages: List<ChatMessage>
 )
 
 object AIClient {
@@ -30,19 +42,20 @@ object AIClient {
     private fun preferences() =
         appContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    private fun request(
+    private suspend fun request(
         path: String,
-        body: JSONObject,
+        method: String = "GET",
+        body: JSONObject? = null,
         token: String? = null
-    ): Pair<Int, String> {
+    ): Pair<Int, String> = withContext(Dispatchers.IO) {
+
         val connection =
-            (URL("$API_URL$path").openConnection() as HttpURLConnection)
+            URL("$API_URL$path").openConnection() as HttpURLConnection
 
         try {
-            connection.requestMethod = "POST"
+            connection.requestMethod = method
             connection.connectTimeout = 20000
             connection.readTimeout = 120000
-            connection.doOutput = true
 
             connection.setRequestProperty(
                 "Content-Type",
@@ -56,36 +69,51 @@ object AIClient {
                 )
             }
 
-            connection.outputStream.use {
-                it.write(body.toString().toByteArray(Charsets.UTF_8))
+            if (body != null) {
+                connection.doOutput = true
+                connection.outputStream.use {
+                    it.write(body.toString().toByteArray(Charsets.UTF_8))
+                }
             }
 
             val code = connection.responseCode
-
             val stream = if (code in 200..299) {
                 connection.inputStream
             } else {
                 connection.errorStream
             }
 
-            val response = stream.bufferedReader().use {
+            val response = stream?.bufferedReader()?.use {
                 it.readText()
-            }
+            } ?: ""
 
-            return Pair(code, response)
+            Pair(code, response)
         } finally {
             connection.disconnect()
         }
     }
 
-    private fun createSession(): String {
+    private suspend fun getSession(): String {
+        val saved = preferences().getString(TOKEN_KEY, null)
+        if (!saved.isNullOrBlank()) return saved
+
         val result = request(
-            "/session",
-            JSONObject()
+            path = "/session",
+            method = "POST",
+            body = JSONObject()
         )
 
         if (result.first !in 200..299) {
-            throw Exception("Could not create Fenn session.")
+            val message = try {
+                JSONObject(result.second).optString(
+                    "error",
+                    "Could not create Fenn session."
+                )
+            } catch (_: Exception) {
+                "Could not create Fenn session. Server returned ${result.first}."
+            }
+
+            throw Exception("$message (HTTP ${result.first})")
         }
 
         val token = JSONObject(result.second).getString("token")
@@ -97,16 +125,10 @@ object AIClient {
         return token
     }
 
-    private fun getSession(): String {
-        return preferences().getString(TOKEN_KEY, null)
-            ?: createSession()
-    }
-
     suspend fun ask(
         question: String,
         conversationId: String
-    ): AIReply = withContext(Dispatchers.IO) {
-
+    ): AIReply {
         val token = getSession()
 
         val body = JSONObject().apply {
@@ -115,15 +137,18 @@ object AIClient {
         }
 
         val result = request(
-            "/chat",
-            body,
-            token
+            path = "/chat",
+            method = "POST",
+            body = body,
+            token = token
         )
 
         if (result.first !in 200..299) {
             val error = try {
-                JSONObject(result.second)
-                    .optString("error", "AI request failed.")
+                JSONObject(result.second).optString(
+                    "error",
+                    "AI request failed."
+                )
             } catch (_: Exception) {
                 "AI request failed."
             }
@@ -139,71 +164,107 @@ object AIClient {
         )
     }
 
-    suspend fun getMemories(): List<String> =
-        withContext(Dispatchers.IO) {
-            val token = getSession()
+    suspend fun getConversations(): List<SavedConversation> {
+        val token = getSession()
+        val result = request(
+            path = "/conversations",
+            token = token
+        )
 
-            val connection =
-                URL("$API_URL/memory").openConnection() as HttpURLConnection
-
-            try {
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 20000
-                connection.readTimeout = 30000
-
-                connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer $token"
-                )
-
-                val code = connection.responseCode
-                val stream = if (code in 200..299) {
-                    connection.inputStream
-                } else {
-                    connection.errorStream
-                }
-
-                val response = stream.bufferedReader().use {
-                    it.readText()
-                }
-
-                if (code !in 200..299) {
-                    throw Exception("Could not load memories.")
-                }
-
-                val array = JSONObject(response)
-                    .getJSONArray("memories")
-
-                List(array.length()) {
-                    array.getJSONObject(it).getString("content")
-                }
-            } finally {
-                connection.disconnect()
-            }
+        if (result.first !in 200..299) {
+            throw Exception("Could not load chat history.")
         }
 
-    suspend fun deleteMemories() =
-        withContext(Dispatchers.IO) {
-            val token = getSession()
+        val array = JSONObject(result.second)
+            .getJSONArray("conversations")
 
-            val connection =
-                URL("$API_URL/memory").openConnection() as HttpURLConnection
+        return List(array.length()) { index ->
+            val item = array.getJSONObject(index)
 
-            try {
-                connection.requestMethod = "DELETE"
-                connection.connectTimeout = 20000
-                connection.readTimeout = 30000
-
-                connection.setRequestProperty(
-                    "Authorization",
-                    "Bearer $token"
-                )
-
-                if (connection.responseCode !in 200..299) {
-                    throw Exception("Could not delete memories.")
-                }
-            } finally {
-                connection.disconnect()
-            }
+            SavedConversation(
+                id = item.getString("id"),
+                title = item.optString("title", "New chat"),
+                createdAt = item.optString("created_at", "")
+            )
         }
+    }
+
+    suspend fun getConversation(id: String): LoadedConversation {
+        val token = getSession()
+        val result = request(
+            path = "/conversations/${java.net.URLEncoder.encode(id, "UTF-8")}",
+            token = token
+        )
+
+        if (result.first !in 200..299) {
+            throw Exception("Could not open conversation.")
+        }
+
+        val data = JSONObject(result.second)
+        val conversation = data.getJSONObject("conversation")
+        val array = data.getJSONArray("messages")
+
+        val messages = mutableListOf<ChatMessage>()
+
+        for (index in 0 until array.length()) {
+            val item = array.getJSONObject(index)
+
+            messages.add(
+                ChatMessage(
+                    text = item.getString("content"),
+                    isUser = item.getString("role") == "user"
+                )
+            )
+        }
+
+        return LoadedConversation(
+            id = conversation.getString("id"),
+            messages = messages
+        )
+    }
+
+    suspend fun deleteConversation(id: String) {
+        val token = getSession()
+        val result = request(
+            path = "/conversations/${java.net.URLEncoder.encode(id, "UTF-8")}",
+            method = "DELETE",
+            token = token
+        )
+
+        if (result.first !in 200..299) {
+            throw Exception("Could not delete conversation.")
+        }
+    }
+
+    suspend fun getMemories(): List<String> {
+        val token = getSession()
+        val result = request(
+            path = "/memory",
+            token = token
+        )
+
+        if (result.first !in 200..299) {
+            throw Exception("Could not load memories.")
+        }
+
+        val array = JSONObject(result.second)
+            .getJSONArray("memories")
+
+        return List(array.length()) {
+            array.getJSONObject(it).getString("content")
+        }
+    }
+
+    suspend fun deleteMemories() {
+        val token = getSession()
+        val result = request(
+            path = "/memory",
+            method = "DELETE",
+            token = token
+        )
+
+        if (result.first !in 200..299) {
+            throw Exception("Could not delete memories.")
+        }
+    }
 }
