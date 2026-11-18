@@ -1,3 +1,4 @@
+
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
@@ -15,15 +16,15 @@ export default {
       }
 
       const response = await fetch(
-        "https://api.openai.com/v1/chat/completions",
+        "https://api.deepseek.com/chat/completions",
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${env.OPENAI_API_KEY}`,
+            "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "gpt-4o-mini",
+            model: "deepseek-chat",
             messages: [
               {
                 role: "user",
