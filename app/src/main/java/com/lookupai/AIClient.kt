@@ -3,11 +3,11 @@ package com.lookupai
 
 import android.content.Context
 import org.json.JSONObject
-import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 data class AIReply(
     val answer: String,
@@ -77,6 +77,7 @@ object AIClient {
             }
 
             val code = connection.responseCode
+
             val stream = if (code in 200..299) {
                 connection.inputStream
             } else {
@@ -88,6 +89,7 @@ object AIClient {
             } ?: ""
 
             Pair(code, response)
+
         } finally {
             connection.disconnect()
         }
@@ -95,6 +97,7 @@ object AIClient {
 
     private suspend fun getSession(): String {
         val saved = preferences().getString(TOKEN_KEY, null)
+
         if (!saved.isNullOrBlank()) return saved
 
         val result = request(
@@ -158,7 +161,7 @@ object AIClient {
 
         val data = JSONObject(result.second)
 
-        AIReply(
+        return AIReply(
             answer = data.getString("answer"),
             conversationId = data.getString("conversationId")
         )
@@ -166,6 +169,7 @@ object AIClient {
 
     suspend fun getConversations(): List<SavedConversation> {
         val token = getSession()
+
         val result = request(
             path = "/conversations",
             token = token
@@ -191,8 +195,11 @@ object AIClient {
 
     suspend fun getConversation(id: String): LoadedConversation {
         val token = getSession()
+
+        val encodedId = URLEncoder.encode(id, "UTF-8")
+
         val result = request(
-            path = "/conversations/${java.net.URLEncoder.encode(id, "UTF-8")}",
+            path = "/conversations/$encodedId",
             token = token
         )
 
@@ -225,8 +232,11 @@ object AIClient {
 
     suspend fun deleteConversation(id: String) {
         val token = getSession()
+
+        val encodedId = URLEncoder.encode(id, "UTF-8")
+
         val result = request(
-            path = "/conversations/${java.net.URLEncoder.encode(id, "UTF-8")}",
+            path = "/conversations/$encodedId",
             method = "DELETE",
             token = token
         )
@@ -238,6 +248,7 @@ object AIClient {
 
     suspend fun getMemories(): List<String> {
         val token = getSession()
+
         val result = request(
             path = "/memory",
             token = token
@@ -257,6 +268,7 @@ object AIClient {
 
     suspend fun deleteMemories() {
         val token = getSession()
+
         val result = request(
             path = "/memory",
             method = "DELETE",
