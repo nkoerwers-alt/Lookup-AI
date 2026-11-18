@@ -88,7 +88,12 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 )
             }
 
-            IconButton(onClick = { input = "" }) {
+            IconButton(
+    onClick = {
+        viewModel.clearChat()
+        input = ""
+    }
+) {
                 Icon(
                     Icons.Default.Add,
                     contentDescription = "New chat",
