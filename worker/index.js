@@ -2,7 +2,7 @@
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") {
-      return new Response("Lookup AI backend is running.");
+      return new Response("Fenn AI backend is running.");
     }
 
     try {
@@ -16,15 +16,15 @@ export default {
       }
 
       const response = await fetch(
-        "https://api.deepseek.com/chat/completions",
+        "https://api.groq.com/openai/v1/chat/completions",
         {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${env.DEEPSEEK_API_KEY}`,
+            "Authorization": `Bearer ${env.GROQ_API_KEY}`,
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            model: "deepseek-chat",
+            model: "llama-3.3-70b-versatile",
             messages: [
               {
                 role: "user",
