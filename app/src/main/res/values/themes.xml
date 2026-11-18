@@ -1,55 +1,10 @@
 
-package com.lookupai
-
-import android.os.Build
-import android.os.Bundle
-import android.graphics.Color
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
-
-class MainActivity : ComponentActivity() {
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        window.statusBarColor = Color.BLACK
-        window.navigationBarColor = Color.BLACK
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            window.isNavigationBarContrastEnforced = false
-        }
-
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = 0
-
-        setContent {
-            FennAIApp()
-        }
-    }
-}
-
-@Composable
-fun FennAIApp() {
-    val viewModel = remember { ChatViewModel() }
-
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = ColorSchemeBackground,
-            surface = ColorSchemeBackground,
-            primary = Color(0xFF8B5CF6)
-        )
-    ) {
-        Surface(
-            color = MaterialTheme.colorScheme.background
-        ) {
-            ChatScreen(viewModel = viewModel)
-        }
-    }
-}
-
-private val ColorSchemeBackground = androidx.compose.ui.graphics.Color(0xFF080808)
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LookupAI" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#000000</item>
+        <item name="android:navigationBarColor">#000000</item>
+    </style>
+</resources>
