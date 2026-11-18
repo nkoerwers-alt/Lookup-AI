@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,8 +23,10 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
 
 private val FennBackground = Color(0xFF08080D)
 private val FennSurface = Color(0xFF171720)
@@ -35,9 +39,14 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val messages by viewModel.messages.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val conversations by viewModel.conversations.collectAsState()
+    val currentConversationId by viewModel.currentConversationId.collectAsState()
 
     var input by remember { mutableStateOf("") }
+
     val listState = rememberLazyListState()
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(messages.size, loading) {
         if (messages.isNotEmpty()) {
@@ -45,236 +54,382 @@ fun ChatScreen(viewModel: ChatViewModel) {
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(FennBackground)
-            .padding(horizontal = 16.dp)
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(FennPurple, RoundedCornerShape(15.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "F",
-                    color = Color.White,
-                    fontSize = 25.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "Fenn AI",
-                    color = FennWhite,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    "Your AI assistant",
-                    color = FennMuted,
-                    fontSize = 12.sp
-                )
-            }
-
-            IconButton(
-    onClick = {
-        viewModel.clearChat()
-        input = ""
+    LaunchedEffect(Unit) {
+        viewModel.loadConversations()
     }
-) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "New chat",
-                    tint = FennWhite
-                )
-            }
-        }
 
-        HorizontalDivider(
-            color = Color.White.copy(alpha = 0.08f)
-        )
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            ModalDrawerSheet(
+                drawerContainerColor = FennBackground,
+                drawerContentColor = FennWhite
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Chat history",
+                        modifier = Modifier.weight(1f),
+                        color = FennWhite,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
-        // Messages
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth(),
-            contentPadding = PaddingValues(vertical = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(15.dp)
-        ) {
-            if (messages.isEmpty()) {
-                item {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 75.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(76.dp)
-                                .background(
-                                    FennPurple.copy(alpha = 0.16f),
-                                    RoundedCornerShape(24.dp)
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                "F",
-                                color = FennPurple,
-                                fontSize = 38.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                            }
                         }
+                    ) {
+                        Text("✕", color = FennWhite, fontSize = 20.sp)
+                    }
+                }
 
-                        Spacer(Modifier.height(22.dp))
+                Button(
+                    onClick = {
+                        viewModel.clearChat()
+                        input = ""
+                        scope.launch {
+                            drawerState.close()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FennPurple
+                    )
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("New chat")
+                }
 
-                        Text(
-                            "What's on your mind?",
-                            color = FennWhite,
-                            fontSize = 23.sp,
-                            fontWeight = FontWeight.Bold
+                Spacer(Modifier.height(16.dp))
+
+                if (conversations.isEmpty()) {
+                    Text(
+                        "No saved conversations yet.",
+                        modifier = Modifier.padding(18.dp),
+                        color = FennMuted,
+                        fontSize = 14.sp
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = 10.dp,
+                            end = 10.dp,
+                            bottom = 20.dp
                         )
+                    ) {
+                        items(
+                            items = conversations,
+                            key = { it.id }
+                        ) { conversation ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                NavigationDrawerItem(
+                                    label = {
+                                        Text(
+                                            conversation.title.ifBlank {
+                                                "New chat"
+                                            },
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    selected = currentConversationId == conversation.id,
+                                    onClick = {
+                                        viewModel.openConversation(conversation.id)
+                                        input = ""
+                                        scope.launch {
+                                            drawerState.close()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = NavigationDrawerItemDefaults.colors(
+                                        selectedContainerColor =
+                                            FennPurple.copy(alpha = 0.2f),
+                                        selectedTextColor = FennWhite,
+                                        unselectedTextColor = FennMuted
+                                    )
+                                )
 
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            "Ask Fenn anything. Let's figure it out.",
-                            color = FennMuted,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center
-                        )
+                                IconButton(
+                                    onClick = {
+                                        viewModel.deleteConversation(conversation.id)
+                                    }
+                                ) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Delete conversation",
+                                        tint = Color(0xFFFF7777)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
+        }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(FennBackground)
+                .padding(horizontal = 16.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = {
+                        viewModel.loadConversations()
+                        scope.launch {
+                            drawerState.open()
+                        }
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Menu,
+                        contentDescription = "Chat history",
+                        tint = FennWhite
+                    )
+                }
 
-            items(messages) { message ->
-                MessageBubble(message)
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(
+                            FennPurple,
+                            RoundedCornerShape(13.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "F",
+                        color = Color.White,
+                        fontSize = 23.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Fenn AI",
+                        color = FennWhite,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        "Your AI assistant",
+                        color = FennMuted,
+                        fontSize = 12.sp
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        viewModel.clearChat()
+                        input = ""
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "New chat",
+                        tint = FennWhite
+                    )
+                }
             }
 
-            if (loading) {
-                item {
-                    Row(
-                        modifier = Modifier
-                            .background(
-                                FennSurface,
-                                RoundedCornerShape(18.dp)
+            HorizontalDivider(
+                color = Color.White.copy(alpha = 0.08f)
+            )
+
+            // Messages
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+                contentPadding = PaddingValues(vertical = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(15.dp)
+            ) {
+                if (messages.isEmpty()) {
+                    item {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 75.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(76.dp)
+                                    .background(
+                                        FennPurple.copy(alpha = 0.16f),
+                                        RoundedCornerShape(24.dp)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "F",
+                                    color = FennPurple,
+                                    fontSize = 38.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(Modifier.height(22.dp))
+
+                            Text(
+                                "What's on your mind?",
+                                color = FennWhite,
+                                fontSize = 23.sp,
+                                fontWeight = FontWeight.Bold
                             )
-                            .padding(15.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(18.dp),
-                            color = FennPurple,
-                            strokeWidth = 2.dp
-                        )
 
-                        Spacer(Modifier.width(12.dp))
+                            Spacer(Modifier.height(8.dp))
 
+                            Text(
+                                "Ask Fenn anything. Let's figure it out.",
+                                color = FennMuted,
+                                fontSize = 14.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                items(messages) { message ->
+                    MessageBubble(message)
+                }
+
+                if (loading) {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .background(
+                                    FennSurface,
+                                    RoundedCornerShape(18.dp)
+                                )
+                                .padding(15.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                color = FennPurple,
+                                strokeWidth = 2.dp
+                            )
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Text(
+                                "Fenn is thinking...",
+                                color = FennMuted,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
+                }
+
+                if (error != null) {
+                    item {
                         Text(
-                            "Fenn is thinking...",
-                            color = FennMuted,
+                            error ?: "",
+                            color = Color(0xFFFF7777),
                             fontSize = 13.sp
                         )
                     }
                 }
             }
 
-            if (error != null) {
-                item {
-                    Text(
-                        error ?: "",
-                        color = Color(0xFFFF7777),
-                        fontSize = 13.sp
-                    )
-                }
-            }
-        }
-
-        // Input bar
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp, bottom = 12.dp)
-                .background(
-                    FennSurface,
-                    RoundedCornerShape(28.dp)
-                )
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            BasicTextField(
-                value = input,
-                onValueChange = { input = it },
+            // Input bar
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 7.dp, vertical = 10.dp),
-                textStyle = TextStyle(
-                    color = FennWhite,
-                    fontSize = 15.sp
-                ),
-                cursorBrush = SolidColor(FennPurple),
-                decorationBox = { innerTextField ->
-                    Box {
-                        if (input.isEmpty()) {
-                            Text(
-                                "Message Fenn AI...",
-                                color = FennMuted,
-                                fontSize = 15.sp
-                            )
-                        }
-                        innerTextField()
-                    }
-                }
-            )
-
-            IconButton(
-                onClick = {
-                    if (input.isNotBlank() && !loading) {
-                        viewModel.askAI(input.trim())
-                        input = ""
-                    }
-                },
-                enabled = input.isNotBlank() && !loading,
-                modifier = Modifier
-                    .size(44.dp)
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 12.dp)
                     .background(
-                        FennPurple.copy(
-                            alpha = if (input.isNotBlank() && !loading)
-                                1f else 0.35f
-                        ),
-                        CircleShape
+                        FennSurface,
+                        RoundedCornerShape(28.dp)
                     )
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Send,
-                    contentDescription = "Send",
-                    tint = Color.White
+                BasicTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 7.dp, vertical = 10.dp),
+                    textStyle = TextStyle(
+                        color = FennWhite,
+                        fontSize = 15.sp
+                    ),
+                    cursorBrush = SolidColor(FennPurple),
+                    decorationBox = { innerTextField ->
+                        Box {
+                            if (input.isEmpty()) {
+                                Text(
+                                    "Message Fenn AI...",
+                                    color = FennMuted,
+                                    fontSize = 15.sp
+                                )
+                            }
+                            innerTextField()
+                        }
+                    }
                 )
-            }
-        }
 
-        Text(
-            "Fenn AI can make mistakes. Check important information.",
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 8.dp),
-            color = FennMuted.copy(alpha = 0.65f),
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center
-        )
+                IconButton(
+                    onClick = {
+                        if (input.isNotBlank() && !loading) {
+                            viewModel.askAI(input.trim())
+                            input = ""
+                        }
+                    },
+                    enabled = input.isNotBlank() && !loading,
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            FennPurple.copy(
+                                alpha = if (input.isNotBlank() && !loading)
+                                    1f else 0.35f
+                            ),
+                            CircleShape
+                        )
+                ) {
+                    Icon(
+                        Icons.Default.Send,
+                        contentDescription = "Send",
+                        tint = Color.White
+                    )
+                }
+            }
+
+            Text(
+                "Fenn AI can make mistakes. Check important information.",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp),
+                color = FennMuted.copy(alpha = 0.65f),
+                fontSize = 10.sp,
+                textAlign = TextAlign.Center
+            )
+        }
     }
 }
