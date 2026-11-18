@@ -22,40 +22,87 @@ class ChatViewModel : ViewModel() {
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    private var conversationId = UUID.randomUUID().toString()
+    private val _conversations =
+        MutableStateFlow<List<SavedConversation>>(emptyList())
+    val conversations: StateFlow<List<SavedConversation>> =
+        _conversations.asStateFlow()
+
+    private val _currentConversationId =
+        MutableStateFlow(UUID.randomUUID().toString())
+    val currentConversationId: StateFlow<String> =
+        _currentConversationId.asStateFlow()
+
+    init {
+        loadConversations()
+    }
 
     fun askAI(question: String) {
         if (question.isBlank() || _loading.value) return
 
         _error.value = null
-
-        _messages.value += ChatMessage(
-            text = question,
-            isUser = true
-        )
-
+        _messages.value += ChatMessage(question, true)
         _loading.value = true
 
-        val currentConversation = conversationId
+        val currentId = _currentConversationId.value
 
         viewModelScope.launch {
             try {
-                val response = AIClient.ask(
-                    question,
-                    currentConversation
-                )
+                val response = AIClient.ask(question, currentId)
+
+                _currentConversationId.value = response.conversationId
 
                 _messages.value += ChatMessage(
                     text = response.answer,
                     isUser = false
                 )
 
+                loadConversations()
             } catch (e: Exception) {
-                _error.value =
-                    e.message ?: "Something went wrong."
-
+                _error.value = e.message ?: "Something went wrong."
             } finally {
                 _loading.value = false
+            }
+        }
+    }
+
+    fun loadConversations() {
+        viewModelScope.launch {
+            try {
+                _conversations.value = AIClient.getConversations()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Could not load chat history."
+            }
+        }
+    }
+
+    fun openConversation(id: String) {
+        if (_loading.value) return
+
+        viewModelScope.launch {
+            try {
+                _error.value = null
+                val conversation = AIClient.getConversation(id)
+
+                _currentConversationId.value = conversation.id
+                _messages.value = conversation.messages
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Could not open conversation."
+            }
+        }
+    }
+
+    fun deleteConversation(id: String) {
+        viewModelScope.launch {
+            try {
+                AIClient.deleteConversation(id)
+
+                if (_currentConversationId.value == id) {
+                    clearChat()
+                }
+
+                loadConversations()
+            } catch (e: Exception) {
+                _error.value = e.message ?: "Could not delete conversation."
             }
         }
     }
@@ -65,18 +112,15 @@ class ChatViewModel : ViewModel() {
 
         _messages.value = emptyList()
         _error.value = null
-        conversationId = UUID.randomUUID().toString()
+        _currentConversationId.value = UUID.randomUUID().toString()
     }
 
-    fun loadMemories(
-        onResult: (List<String>) -> Unit
-    ) {
+    fun loadMemories(onResult: (List<String>) -> Unit) {
         viewModelScope.launch {
             try {
                 onResult(AIClient.getMemories())
             } catch (e: Exception) {
-                _error.value =
-                    e.message ?: "Could not load memories."
+                _error.value = e.message ?: "Could not load memories."
             }
         }
     }
@@ -87,8 +131,7 @@ class ChatViewModel : ViewModel() {
                 AIClient.deleteMemories()
                 _error.value = null
             } catch (e: Exception) {
-                _error.value =
-                    e.message ?: "Could not delete memories."
+                _error.value = e.message ?: "Could not delete memories."
             }
         }
     }
