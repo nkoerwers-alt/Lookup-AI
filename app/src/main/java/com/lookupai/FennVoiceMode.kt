@@ -16,8 +16,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +26,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.delay
 import java.util.Locale
 
 private val VoiceBackground = Color(0xFF101010)
@@ -59,8 +56,9 @@ fun FennVoiceMode(
     var listening by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Tap the microphone to speak") }
     var waitingForReply by remember { mutableStateOf(false) }
-    var lastSpoken by remember { mutableStateOf("") }
     var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+    var ttsReady by remember { mutableStateOf(false) }
+    var pendingSpeech by remember { mutableStateOf<String?>(null) }
 
     val permissionLauncher =
         rememberLauncherForActivityResult(
@@ -68,9 +66,9 @@ fun FennVoiceMode(
         ) { granted ->
             hasPermission = granted
             status = if (granted) {
-                "Tap the microphone to speak"
+                "Permission granted. Tap the microphone to speak."
             } else {
-                "Microphone permission is required"
+                "Microphone permission is required."
             }
         }
 
@@ -82,26 +80,43 @@ fun FennVoiceMode(
         }
     }
 
+    // Initialize text-to-speech safely.
     DisposableEffect(context) {
-        val engine = TextToSpeech(context) { result ->
+        var engine: TextToSpeech? = null
+
+        engine = TextToSpeech(context) { result ->
             if (result == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.getDefault()
+                val languageResult = engine?.setLanguage(Locale.getDefault())
+
+                ttsReady =
+                    languageResult == TextToSpeech.LANG_AVAILABLE ||
+                    languageResult == TextToSpeech.LANG_COUNTRY_AVAILABLE
+
+                if (!ttsReady) {
+                    status = "Your device does not support this voice language."
+                }
+            } else {
+                ttsReady = false
+                status = "Voice playback could not start."
             }
         }
 
         tts = engine
 
         onDispose {
-            engine.stop()
-            engine.shutdown()
+            ttsReady = false
+            engine?.stop()
+            engine?.shutdown()
             tts = null
         }
     }
 
+    // Initialize speech recognition.
     DisposableEffect(recognizer) {
         if (recognizer != null) {
             recognizer.setRecognitionListener(
                 object : RecognitionListener {
+
                     override fun onReadyForSpeech(params: android.os.Bundle?) {
                         listening = true
                         status = "Listening..."
@@ -112,6 +127,7 @@ fun FennVoiceMode(
                     }
 
                     override fun onRmsChanged(rmsdB: Float) {}
+
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
@@ -121,14 +137,19 @@ fun FennVoiceMode(
 
                     override fun onError(errorCode: Int) {
                         listening = false
+
                         status = when (errorCode) {
                             SpeechRecognizer.ERROR_NO_MATCH ->
                                 "I didn't catch that. Try again."
+
                             SpeechRecognizer.ERROR_SPEECH_TIMEOUT ->
                                 "I didn't hear anything."
+
                             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS ->
                                 "Microphone permission is required."
-                            else -> "Speech recognition failed. Try again."
+
+                            else ->
+                                "Speech recognition failed. Try again."
                         }
                     }
 
@@ -169,25 +190,40 @@ fun FennVoiceMode(
         }
     }
 
-    LaunchedEffect(messages, loading, waitingForReply) {
-        if (!waitingForReply || loading) return@LaunchedEffect
+    // Wait for Fenn's response before speaking it.
+    LaunchedEffect(messages, loading, waitingForReply, error) {
+        if (!waitingForReply || loading) {
+            return@LaunchedEffect
+        }
+
+        if (error != null) {
+            waitingForReply = false
+            status = error ?: "Something went wrong."
+            return@LaunchedEffect
+        }
 
         val latest = messages.lastOrNull()
 
         if (latest != null && !latest.isUser) {
             waitingForReply = false
-            lastSpoken = latest.text
+            pendingSpeech = latest.text
             status = "Fenn replied"
+        }
+    }
 
+    // Speak the reply when the TTS engine is ready.
+    LaunchedEffect(ttsReady, pendingSpeech) {
+        val text = pendingSpeech
+
+        if (ttsReady && !text.isNullOrBlank()) {
             tts?.speak(
-                latest.text,
+                text,
                 TextToSpeech.QUEUE_FLUSH,
                 null,
                 "fenn_reply"
             )
-        } else if (latest?.isUser == true) {
-            waitingForReply = false
-            status = "Something went wrong. Try again."
+
+            pendingSpeech = null
         }
     }
 
@@ -210,18 +246,28 @@ fun FennVoiceMode(
 
         tts?.stop()
 
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(
-                RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-            )
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
+        val speechIntent =
+            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE,
+                    Locale.getDefault()
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_PARTIAL_RESULTS,
+                    false
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_MAX_RESULTS,
+                    1
+                )
+            }
 
         try {
-            recognizer.startListening(intent)
+            recognizer.startListening(speechIntent)
         } catch (_: Exception) {
             listening = false
             status = "Couldn't start the microphone. Try again."
@@ -235,15 +281,18 @@ fun FennVoiceMode(
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = {
-                recognizer?.cancel()
-                tts?.stop()
-                onClose()
-            }) {
+            IconButton(
+                onClick = {
+                    recognizer?.cancel()
+                    tts?.stop()
+                    onClose()
+                }
+            ) {
                 Icon(
                     Icons.Default.ArrowBack,
                     contentDescription = "Back",
@@ -266,6 +315,7 @@ fun FennVoiceMode(
 
         Spacer(Modifier.weight(1f))
 
+        // Microphone visual
         Box(
             modifier = Modifier
                 .size(190.dp)
@@ -278,11 +328,9 @@ fun FennVoiceMode(
                     .background(Color(0xFF303030), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    Icons.Default.Mic,
-                    contentDescription = null,
-                    tint = VoiceWhite,
-                    modifier = Modifier.size(58.dp)
+                Text(
+                    "🎙",
+                    fontSize = 58.sp
                 )
             }
         }
@@ -306,6 +354,7 @@ fun FennVoiceMode(
 
         if (loading) {
             Spacer(Modifier.height(20.dp))
+
             CircularProgressIndicator(
                 color = VoiceWhite,
                 modifier = Modifier.size(25.dp),
@@ -315,6 +364,7 @@ fun FennVoiceMode(
 
         Spacer(Modifier.weight(1f))
 
+        // Main microphone button
         Button(
             onClick = {
                 if (listening) {
@@ -326,8 +376,7 @@ fun FennVoiceMode(
                 }
             },
             enabled = !loading,
-            modifier = Modifier
-                .size(82.dp),
+            modifier = Modifier.size(82.dp),
             shape = CircleShape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = VoiceWhite,
@@ -335,10 +384,10 @@ fun FennVoiceMode(
                 disabledContainerColor = Color.DarkGray
             )
         ) {
-            Icon(
-                if (listening) Icons.Default.Stop else Icons.Default.Mic,
-                contentDescription = if (listening) "Stop listening" else "Speak",
-                modifier = Modifier.size(34.dp)
+            Text(
+                if (listening) "■" else "🎙",
+                fontSize = if (listening) 30.sp else 34.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 
@@ -353,9 +402,11 @@ fun FennVoiceMode(
 
         Spacer(Modifier.height(20.dp))
 
+        // Stop voice playback
         OutlinedButton(
             onClick = {
                 tts?.stop()
+                pendingSpeech = null
                 status = "Voice playback stopped"
             },
             shape = RoundedCornerShape(14.dp),
@@ -363,8 +414,14 @@ fun FennVoiceMode(
                 contentColor = VoiceWhite
             )
         ) {
-            Icon(Icons.Default.Stop, contentDescription = null)
+            Text(
+                "■",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold
+            )
+
             Spacer(Modifier.width(8.dp))
+
             Text("Stop speaking")
         }
 
