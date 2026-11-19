@@ -22,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.font.FontWeight
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -333,10 +333,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 IconButton(
                     onClick = { showVoiceMode = true }
                 ) {
-                    Text(
-                        "🎙",
-                        fontSize = 23.sp
-                    )
+                    Text("🎙", fontSize = 23.sp)
                 }
 
                 IconButton(
