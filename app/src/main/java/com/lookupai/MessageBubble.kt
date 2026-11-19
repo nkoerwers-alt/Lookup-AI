@@ -1,3 +1,4 @@
+
 package com.lookupai
 
 import androidx.compose.foundation.background
@@ -13,8 +14,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -31,23 +36,16 @@ private fun splitMessage(text: String): List<MessagePart> {
 
     for (match in regex.findAll(text)) {
         if (match.range.first > position) {
-            parts.add(
-                MessagePart(
-                    text.substring(position, match.range.first),
-                    false
-                )
-            )
+            parts.add(MessagePart(text.substring(position, match.range.first), false))
         }
 
         parts.add(
             MessagePart(
-                content = match.groupValues[2].trimEnd(),
-                isCode = true,
-                language = match.groupValues[1].trim()
-                    .ifBlank { "CODE" }
+                match.groupValues[2].trimEnd(),
+                true,
+                match.groupValues[1].trim().ifBlank { "CODE" }
             )
         )
-
         position = match.range.last + 1
     }
 
@@ -55,11 +53,38 @@ private fun splitMessage(text: String): List<MessagePart> {
         parts.add(MessagePart(text.substring(position), false))
     }
 
-    if (parts.isEmpty()) {
-        parts.add(MessagePart(text, false))
+    if (parts.isEmpty()) parts.add(MessagePart(text, false))
+    return parts
+}
+
+private fun formatInline(text: String): AnnotatedString {
+    val result = buildAnnotatedString {
+        val regex = Regex("""(\*\*(.+?)\*\*|__(.+?)__|\*(.+?)\*|_(.+?)_)""")
+        var position = 0
+
+        for (match in regex.findAll(text)) {
+            append(text.substring(position, match.range.first))
+
+            val bold = match.groupValues[2].ifEmpty { match.groupValues[3] }
+            val italic = match.groupValues[4].ifEmpty { match.groupValues[5] }
+
+            when {
+                bold.isNotEmpty() -> withStyle(
+                    SpanStyle(fontWeight = FontWeight.Bold)
+                ) { append(bold) }
+
+                italic.isNotEmpty() -> withStyle(
+                    SpanStyle(fontStyle = FontStyle.Italic)
+                ) { append(italic) }
+            }
+
+            position = match.range.last + 1
+        }
+
+        append(text.substring(position))
     }
 
-    return parts
+    return result
 }
 
 @Composable
@@ -70,11 +95,7 @@ fun MessageBubble(message: ChatMessage) {
 
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = if (message.isUser) {
-            Arrangement.End
-        } else {
-            Arrangement.Start
-        },
+        horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
         verticalAlignment = Alignment.Top
     ) {
         if (!message.isUser) {
@@ -82,17 +103,10 @@ fun MessageBubble(message: ChatMessage) {
                 modifier = Modifier
                     .padding(end = 8.dp)
                     .size(32.dp)
-                    .background(
-                        Color(0xFF9565FF),
-                        RoundedCornerShape(10.dp)
-                    ),
+                    .background(Color(0xFF9565FF), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    "F",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("F", color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
 
@@ -122,17 +136,9 @@ fun MessageBubble(message: ChatMessage) {
 
             splitMessage(message.text).forEach { part ->
                 if (part.isCode) {
-                    CodeBlockView(
-                        code = part.content,
-                        language = part.language
-                    )
-                } else if (part.content.isNotEmpty()) {
-                    Text(
-                        text = part.content,
-                        color = textColor,
-                        fontSize = 15.sp,
-                        lineHeight = 22.sp
-                    )
+                    CodeBlockView(part.content, part.language)
+                } else {
+                    FormattedText(part.content, textColor)
                 }
             }
         }
@@ -140,10 +146,67 @@ fun MessageBubble(message: ChatMessage) {
 }
 
 @Composable
-private fun CodeBlockView(
-    code: String,
-    language: String
-) {
+private fun FormattedText(text: String, color: Color) {
+    val lines = text.lines()
+
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        lines.forEach { line ->
+            val heading = Regex("""^(#{1,3})\s+(.+)$""").find(line)
+            val bullet = Regex("""^\s*[-*+]\s+(.+)$""").find(line)
+            val numbered = Regex("""^\s*\d+[.)]\s+(.+)$""").find(line)
+
+            when {
+                heading != null -> {
+                    val level = heading.groupValues[1].length
+                    Text(
+                        text = formatInline(heading.groupValues[2]),
+                        color = color,
+                        fontSize = when (level) {
+                            1 -> 24.sp
+                            2 -> 21.sp
+                            else -> 18.sp
+                        },
+                        fontWeight = FontWeight.Bold,
+                        lineHeight = 29.sp
+                    )
+                }
+
+                bullet != null -> {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text("•  ", color = Color(0xFFB99CFF), fontSize = 15.sp)
+                        Text(
+                            formatInline(bullet.groupValues[1]),
+                            color = color,
+                            fontSize = 15.sp,
+                            lineHeight = 22.sp
+                        )
+                    }
+                }
+
+                numbered != null -> {
+                    Text(
+                        formatInline(line.trim()),
+                        color = color,
+                        fontSize = 15.sp,
+                        lineHeight = 22.sp
+                    )
+                }
+
+                line.isBlank() -> Spacer(Modifier.height(5.dp))
+
+                else -> Text(
+                    formatInline(line),
+                    color = color,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CodeBlockView(code: String, language: String) {
     val clipboard = LocalClipboardManager.current
     var copied by remember { mutableStateOf(false) }
 
@@ -151,10 +214,7 @@ private fun CodeBlockView(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 7.dp)
-            .background(
-                Color(0xFF0D0D13),
-                RoundedCornerShape(12.dp)
-            )
+            .background(Color(0xFF0D0D13), RoundedCornerShape(12.dp))
             .padding(10.dp)
     ) {
         Row(
@@ -191,7 +251,7 @@ private fun CodeBlockView(
                 .horizontalScroll(rememberScrollState())
         ) {
             Text(
-                text = code,
+                code,
                 color = Color(0xFFE5E1F0),
                 fontSize = 12.sp,
                 lineHeight = 19.sp,
