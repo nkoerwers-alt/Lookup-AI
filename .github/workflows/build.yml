@@ -15,14 +15,14 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
+    name: Build Fenn AI
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Set Up Java 17
+      - name: Set Up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -31,31 +31,47 @@ jobs:
       - name: Set Up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Check Android Manifest
+      - name: Show Manifest Contents
         run: |
-          echo "Checking AndroidManifest.xml..."
+          echo "===== CURRENT BRANCH ====="
+          git branch --show-current
+
+          echo "===== MANIFEST FILE ====="
+          ls -l app/src/main/AndroidManifest.xml
+
+          echo "===== MANIFEST WITH LINE NUMBERS ====="
+          nl -ba app/src/main/AndroidManifest.xml
+
+          echo "===== ALL MANIFEST FILES ====="
+          find . -name AndroidManifest.xml -print
+
+      - name: Validate Manifest
+        run: |
           python3 - <<'PY'
           import xml.etree.ElementTree as ET
 
           path = "app/src/main/AndroidManifest.xml"
 
+          with open(path, "rb") as file:
+              content = file.read()
+
+          print("First 200 bytes:", repr(content[:200]))
+
           try:
-              ET.parse(path)
-              print("SUCCESS: AndroidManifest.xml is valid!")
+              ET.fromstring(content)
+              print("SUCCESS: Manifest XML is valid!")
           except ET.ParseError as error:
-              print("FAILED: AndroidManifest.xml contains invalid XML.")
-              print(error)
+              print("MANIFEST ERROR:", error)
               raise
           PY
 
-      - name: Build Debug APK
-        run: gradle assembleDebug --stacktrace --info
+      - name: Build APK
+        run: gradle assembleDebug --stacktrace
 
-      - name: Upload Fenn AI APK
+      - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Fenn-AI-Debug-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          retention-days: 14
