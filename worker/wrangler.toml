@@ -1,3 +1,8 @@
 name = "lookup-ai-backend"
 main = "index.js"
 compatibility_date = "2026-10-03"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "fenn-memory"
+database_id = "5f6fb7a4-526e-42d9-801c-7c194fdb2890"
