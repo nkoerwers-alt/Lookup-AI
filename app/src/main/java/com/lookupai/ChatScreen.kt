@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -47,6 +48,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
     var input by remember { mutableStateOf("") }
     var showOwnerMode by remember { mutableStateOf(false) }
+    var showVoiceMode by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -64,11 +66,20 @@ fun ChatScreen(viewModel: ChatViewModel) {
         viewModel.loadConversations()
     }
 
-    // Show the separate owner login/dashboard screen.
     if (showOwnerMode) {
         OwnerMode(
             onClose = {
                 showOwnerMode = false
+            }
+        )
+        return
+    }
+
+    if (showVoiceMode) {
+        FennVoiceMode(
+            viewModel = viewModel,
+            onClose = {
+                showVoiceMode = false
             }
         )
         return
@@ -92,7 +103,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         .fillMaxSize()
                         .background(FennBackground)
                 ) {
-                    // History header
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -127,7 +137,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         }
                     }
 
-                    // New conversation
                     Button(
                         onClick = {
                             viewModel.clearChat()
@@ -165,7 +174,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
                     Spacer(Modifier.height(10.dp))
 
-                    // Conversation list
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
@@ -238,7 +246,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         }
                     }
 
-                    // Owner login button - fixed at the bottom
                     HorizontalDivider(
                         color = FennBorder,
                         modifier = Modifier.padding(horizontal = 16.dp)
@@ -334,6 +341,21 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     )
                 }
 
+                // Voice mode button
+                IconButton(
+                    onClick = {
+                        showVoiceMode = true
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = "Open voice mode",
+                        tint = FennWhite,
+                        modifier = Modifier.size(23.dp)
+                    )
+                }
+
+                // New chat button
                 IconButton(
                     onClick = {
                         viewModel.clearChat()
