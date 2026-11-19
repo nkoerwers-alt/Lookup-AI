@@ -1,12 +1,8 @@
 
 package com.lookupai
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -368,29 +364,14 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     MessageBubble(message)
                 }
 
+                // Custom Fenn double-cube thinking animation
                 if (loading) {
-                    item {
-                        Row(
-                            modifier = Modifier
-                                .background(
-                                    FennSurface,
-                                    RoundedCornerShape(14.dp)
-                                )
-                                .padding(horizontal = 15.dp, vertical = 13.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = FennWhite,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            Text(
-                                "Thinking",
-                                color = FennMuted,
-                                fontSize = 13.sp
-                            )
-                        }
+                    item(key = "fenn_thinking") {
+                        FennAIThinking(
+                            cubeSize = 30.dp,
+                            name = "fenn",
+                            message = " is thinking..."
+                        )
                     }
                 }
 
