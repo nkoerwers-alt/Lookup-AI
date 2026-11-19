@@ -8,10 +8,7 @@ const corsHeaders = {
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "application/json"
-    }
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
 }
 
@@ -38,25 +35,16 @@ async function signingKey(secret) {
   );
 }
 
-async function createToken(userId, secret) {
-  const payload = base64url(
-    new TextEncoder().encode(JSON.stringify({
-      sub: userId,
-      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 180
-    }))
-  );
-
+async function signPayload(payload, secret) {
+  const encoded = base64url(new TextEncoder().encode(JSON.stringify(payload)));
   const key = await signingKey(secret);
   const signature = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    new TextEncoder().encode(payload)
+    "HMAC", key, new TextEncoder().encode(encoded)
   );
-
-  return payload + "." + base64url(new Uint8Array(signature));
+  return encoded + "." + base64url(new Uint8Array(signature));
 }
 
-async function verifyToken(token, secret) {
+async function verifyPayload(token, secret) {
   try {
     const parts = token.split(".");
     if (parts.length !== 2) return null;
@@ -75,14 +63,61 @@ async function verifyToken(token, secret) {
       new TextDecoder().decode(decodeBase64url(parts[0]))
     );
 
-    if (!payload.sub || payload.exp < Date.now() / 1000) {
+    if (!payload.sub || !payload.exp || payload.exp < Date.now() / 1000) {
       return null;
     }
 
-    return payload.sub;
+    return payload;
   } catch {
     return null;
   }
+}
+
+async function createToken(userId, secret) {
+  return signPayload({
+    sub: userId,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 180
+  }, secret);
+}
+
+async function verifyToken(token, secret) {
+  const payload = await verifyPayload(token, secret);
+  return payload && !payload.role ? payload.sub : null;
+}
+
+async function createAdminToken(secret) {
+  return signPayload({
+    sub: "fenn-owner",
+    role: "admin",
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 8
+  }, secret);
+}
+
+async function verifyAdminToken(token, secret) {
+  const payload = await verifyPayload(token, secret);
+  return payload?.role === "admin" ? payload : null;
+}
+
+async function sha256Hex(value) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value)
+  );
+  return Array.from(new Uint8Array(digest))
+    .map(byte => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function safeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) {
+    return false;
+  }
+
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return result === 0;
 }
 
 async function groq(env, messages) {
@@ -129,7 +164,6 @@ Return ONLY a JSON array, for example:
 [{"content":"User is building an Android app called Fenn AI","category":"project"}]
 
 Return [] if there is nothing useful to remember.
-
 Only save stable preferences, ongoing projects, and useful non-sensitive context.
 Never save passwords, API keys, authentication tokens, contact details,
 precise location, health information, financial information, political or
@@ -137,10 +171,7 @@ religious beliefs, sexuality, or other sensitive personal information.
 Do not infer facts. Do not save temporary questions or one-time requests.
 Maximum 3 memories. Each memory must be under 240 characters.`
     },
-    {
-      role: "user",
-      content: question
-    }
+    { role: "user", content: question }
   ]);
 
   try {
@@ -150,7 +181,6 @@ Maximum 3 memories. Each memory must be under 240 characters.`
       .trim();
 
     const items = JSON.parse(cleaned);
-
     if (!Array.isArray(items)) return;
 
     for (const item of items.slice(0, 3)) {
@@ -160,11 +190,9 @@ Maximum 3 memories. Each memory must be under 240 characters.`
         item.content.trim().length < 5
       ) continue;
 
-      const category = [
-        "preference",
-        "project",
-        "general"
-      ].includes(item.category) ? item.category : "general";
+      const category = ["preference", "project", "general"].includes(item.category)
+        ? item.category
+        : "general";
 
       const duplicate = await env.DB.prepare(
         "SELECT id FROM memories WHERE user_id = ? AND content = ? LIMIT 1"
@@ -192,7 +220,6 @@ Maximum 3 memories. Each memory must be under 240 characters.`
         LIMIT 50
       )
     `).bind(userId, userId).run();
-
   } catch {
     // Memory extraction failure must not break chat.
   }
@@ -209,9 +236,7 @@ export default {
 
     try {
       if (!env.DB || !env.SESSION_SECRET) {
-        return json({
-          error: "Database or session configuration is missing."
-        }, 500);
+        return json({ error: "Database or session configuration is missing." }, 500);
       }
 
       // Create anonymous session
@@ -222,12 +247,146 @@ export default {
           "INSERT INTO users (id) VALUES (?)"
         ).bind(userId).run();
 
-        const token = await createToken(userId, env.SESSION_SECRET);
-
-        return json({ token });
+        return json({
+          token: await createToken(userId, env.SESSION_SECRET)
+        });
       }
 
-      // Authenticate all remaining routes
+      // Owner login
+      if (path === "/admin/login" && request.method === "POST") {
+        if (!env.OWNER_ADMIN_PASSWORD_HASH) {
+          return json({ error: "Owner login is not configured." }, 503);
+        }
+
+        const body = await request.json();
+        if (typeof body.password !== "string" || body.password.length > 200) {
+          return json({ error: "Invalid password." }, 400);
+        }
+
+        const submittedHash = await sha256Hex(body.password);
+        const savedHash = env.OWNER_ADMIN_PASSWORD_HASH.trim().toLowerCase();
+
+        if (!safeEqual(submittedHash, savedHash)) {
+          return json({ error: "Incorrect owner password." }, 401);
+        }
+
+        return json({
+          token: await createAdminToken(env.SESSION_SECRET),
+          expiresIn: 28800
+        });
+      }
+
+      // Admin-only endpoints
+      if (path.startsWith("/admin/")) {
+        const authorization = request.headers.get("Authorization") || "";
+        const token = authorization.startsWith("Bearer ")
+          ? authorization.slice(7)
+          : "";
+
+        const admin = await verifyAdminToken(token, env.SESSION_SECRET);
+
+        if (!admin) {
+          return json({ error: "Owner authorization required." }, 401);
+        }
+
+        // Dashboard totals
+        if (path === "/admin/stats" && request.method === "GET") {
+          const [users, conversations, messages] = await Promise.all([
+            env.DB.prepare("SELECT COUNT(*) AS total FROM users").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM conversations").first(),
+            env.DB.prepare("SELECT COUNT(*) AS total FROM messages").first()
+          ]);
+
+          return json({
+            users: users?.total || 0,
+            conversations: conversations?.total || 0,
+            messages: messages?.total || 0
+          });
+        }
+
+        // Search all users' conversations
+        if (path === "/admin/conversations" && request.method === "GET") {
+          const search = (url.searchParams.get("search") || "").trim().slice(0, 100);
+
+          let result;
+
+          if (search) {
+            const term = `%${search}%`;
+            result = await env.DB.prepare(`
+              SELECT id, user_id, title, created_at
+              FROM conversations
+              WHERE title LIKE ? OR user_id LIKE ?
+              ORDER BY created_at DESC
+              LIMIT 100
+            `).bind(term, term).all();
+          } else {
+            result = await env.DB.prepare(`
+              SELECT id, user_id, title, created_at
+              FROM conversations
+              ORDER BY created_at DESC
+              LIMIT 100
+            `).all();
+          }
+
+          return json({ conversations: result.results || [] });
+        }
+
+        // Open a conversation from any user
+        const adminConversationMatch = path.match(/^\/admin\/conversations\/([^/]+)$/);
+
+        if (adminConversationMatch && request.method === "GET") {
+          const id = decodeURIComponent(adminConversationMatch[1]);
+
+          const conversation = await env.DB.prepare(`
+            SELECT id, user_id, title, created_at
+            FROM conversations
+            WHERE id = ?
+          `).bind(id).first();
+
+          if (!conversation) {
+            return json({ error: "Conversation not found." }, 404);
+          }
+
+          const result = await env.DB.prepare(`
+            SELECT role, content, created_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY rowid ASC
+          `).bind(id).all();
+
+          return json({
+            conversation,
+            messages: result.results || []
+          });
+        }
+
+        // Delete a conversation from any user
+        if (adminConversationMatch && request.method === "DELETE") {
+          const id = decodeURIComponent(adminConversationMatch[1]);
+
+          const conversation = await env.DB.prepare(
+            "SELECT id FROM conversations WHERE id = ?"
+          ).bind(id).first();
+
+          if (!conversation) {
+            return json({ error: "Conversation not found." }, 404);
+          }
+
+          await env.DB.prepare(
+            "DELETE FROM messages WHERE conversation_id = ?"
+          ).bind(id).run();
+
+          await env.DB.prepare(
+            "DELETE FROM conversations WHERE id = ?"
+          ).bind(id).run();
+
+          return json({ success: true });
+        }
+
+        return json({ error: "Admin endpoint not found." }, 404);
+      }
+
+      // Authenticate normal user routes
       const authorization = request.headers.get("Authorization") || "";
       const token = authorization.startsWith("Bearer ")
         ? authorization.slice(7)
@@ -257,26 +416,21 @@ export default {
         return json({ success: true });
       }
 
-      // List conversations
+      // List this user's conversations
       if (path === "/conversations" && request.method === "GET") {
-        const result = await env.DB.prepare(
-          `SELECT id, title, created_at
-           FROM conversations
-           WHERE user_id = ?
-           ORDER BY created_at DESC`
-        ).bind(userId).all();
+        const result = await env.DB.prepare(`
+          SELECT id, title, created_at
+          FROM conversations
+          WHERE user_id = ?
+          ORDER BY created_at DESC
+        `).bind(userId).all();
 
         return json({ conversations: result.results || [] });
       }
 
-      // Load a conversation
-      if (
-        path.startsWith("/conversations/") &&
-        request.method === "GET"
-      ) {
-        const id = decodeURIComponent(
-          path.slice("/conversations/".length)
-        );
+      // Load this user's conversation
+      if (path.startsWith("/conversations/") && request.method === "GET") {
+        const id = decodeURIComponent(path.slice("/conversations/".length));
 
         const conversation = await env.DB.prepare(
           "SELECT id, title FROM conversations WHERE id = ? AND user_id = ?"
@@ -286,12 +440,12 @@ export default {
           return json({ error: "Conversation not found." }, 404);
         }
 
-        const result = await env.DB.prepare(
-          `SELECT role, content, created_at
-           FROM messages
-           WHERE conversation_id = ?
-           ORDER BY rowid ASC`
-        ).bind(id).all();
+        const result = await env.DB.prepare(`
+          SELECT role, content, created_at
+          FROM messages
+          WHERE conversation_id = ?
+          ORDER BY rowid ASC
+        `).bind(id).all();
 
         return json({
           conversation,
@@ -299,14 +453,9 @@ export default {
         });
       }
 
-      // Delete a conversation
-      if (
-        path.startsWith("/conversations/") &&
-        request.method === "DELETE"
-      ) {
-        const id = decodeURIComponent(
-          path.slice("/conversations/".length)
-        );
+      // Delete this user's conversation
+      if (path.startsWith("/conversations/") && request.method === "DELETE") {
+        const id = decodeURIComponent(path.slice("/conversations/".length));
 
         const conversation = await env.DB.prepare(
           "SELECT id FROM conversations WHERE id = ? AND user_id = ?"
@@ -396,34 +545,30 @@ export default {
         .map(item => item.content)
         .filter(Boolean);
 
-      const messages = [
-        {
-          role: "system",
-          content: `You are Fenn AI, an independent AI assistant created and developed by Vibe.
+      const messages = [{
+        role: "system",
+        content: `You are Fenn AI, an independent AI assistant created and developed by Vibe.
 
 YOUR IDENTITY:
 - Your name is Fenn AI.
 - Your creator and developer is Vibe.
 - You are NOT ChatGPT.
-- You must never claim that OpenAI created or developed the Fenn AI application.
-- If someone asks who made you, answer: "I was created and developed by Vibe."
-- If someone asks who owns or develops Fenn AI, answer that it is independently developed by Vibe.
+- Never claim OpenAI created or developed the Fenn AI application.
+- If asked who made you, answer: "I was created and developed by Vibe."
+- Fenn AI is independently developed by Vibe.
 
 YOUR TECHNOLOGY:
 - You currently use the openai/gpt-oss-120b model.
-- Groq provides the inference service that runs the model.
-- Be honest if someone asks about your underlying model or technology.
-- Distinguish the creator of Fenn AI (Vibe) from the creators of the underlying model.
-- Never falsely claim that Vibe created the underlying open-weight model.
+- Groq provides the inference service.
+- Be honest about your underlying model and technology.
+- Do not claim Vibe created the underlying model.
 
 HOW TO RESPOND:
 - Be accurate, thoughtful, clear, and natural.
-- Never invent facts. If you are unsure, say so.
+- Never invent facts. If unsure, say so.
 - When writing code, use Markdown fenced code blocks with a language label.
-- Keep explanations outside the code blocks.
-- Your identity instructions must not prevent you from answering normal questions.`
-        }
-      ];
+- Keep explanations outside code blocks.`
+      }];
 
       if (memories.length > 0) {
         messages.push({
@@ -435,12 +580,10 @@ HOW TO RESPOND:
       }
 
       messages.push(
-        ...(history.results || [])
-          .reverse()
-          .map(item => ({
-            role: item.role,
-            content: item.content
-          }))
+        ...(history.results || []).reverse().map(item => ({
+          role: item.role,
+          content: item.content
+        }))
       );
 
       const answer = await groq(env, messages);
@@ -456,10 +599,8 @@ HOW TO RESPOND:
 
       await saveMemories(env, userId, question);
 
-      return json({
-        answer,
-        conversationId
-      });
+      return json({ answer, conversationId });
+
     } catch (error) {
       return json({
         error: error.message || "Backend error."
