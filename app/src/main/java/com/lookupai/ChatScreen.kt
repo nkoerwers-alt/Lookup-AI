@@ -14,7 +14,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -23,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,20 +66,14 @@ fun ChatScreen(viewModel: ChatViewModel) {
     }
 
     if (showOwnerMode) {
-        OwnerMode(
-            onClose = {
-                showOwnerMode = false
-            }
-        )
+        OwnerMode(onClose = { showOwnerMode = false })
         return
     }
 
     if (showVoiceMode) {
         FennVoiceMode(
             viewModel = viewModel,
-            onClose = {
-                showVoiceMode = false
-            }
+            onClose = { showVoiceMode = false }
         )
         return
     }
@@ -117,9 +110,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp
                             )
-
                             Spacer(Modifier.height(4.dp))
-
                             Text(
                                 "History",
                                 color = FennWhite,
@@ -287,7 +278,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 .background(FennBackground)
                 .padding(horizontal = 18.dp)
         ) {
-            // Header
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -333,7 +323,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.7).sp
                     )
-
                     Text(
                         "AI assistant",
                         color = FennMuted,
@@ -341,21 +330,15 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     )
                 }
 
-                // Voice mode button
                 IconButton(
-                    onClick = {
-                        showVoiceMode = true
-                    }
+                    onClick = { showVoiceMode = true }
                 ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = "Open voice mode",
-                        tint = FennWhite,
-                        modifier = Modifier.size(23.dp)
+                    Text(
+                        "🎙",
+                        fontSize = 23.sp
                     )
                 }
 
-                // New chat button
                 IconButton(
                     onClick = {
                         viewModel.clearChat()
@@ -372,7 +355,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
             HorizontalDivider(color = FennBorder)
 
-            // Messages
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -471,7 +453,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                 }
             }
 
-            // Message composer
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
