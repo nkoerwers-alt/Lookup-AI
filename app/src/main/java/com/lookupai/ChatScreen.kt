@@ -46,6 +46,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
     val currentConversationId by viewModel.currentConversationId.collectAsState()
 
     var input by remember { mutableStateOf("") }
+    var showOwnerMode by remember { mutableStateOf(false) }
 
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -63,11 +64,22 @@ fun ChatScreen(viewModel: ChatViewModel) {
         viewModel.loadConversations()
     }
 
+    // Show the separate owner login/dashboard screen.
+    if (showOwnerMode) {
+        OwnerMode(
+            onClose = {
+                showOwnerMode = false
+            }
+        )
+        return
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
         scrimColor = Color.Black.copy(alpha = 0.7f),
         drawerContent = {
             ModalDrawerSheet(
+                modifier = Modifier.fillMaxHeight(),
                 drawerContainerColor = FennBackground,
                 drawerContentColor = FennWhite,
                 drawerShape = RoundedCornerShape(
@@ -75,92 +87,107 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     bottomEnd = 22.dp
                 )
             ) {
-                Row(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 22.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .fillMaxSize()
+                        .background(FennBackground)
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "YOUR CHATS",
-                            color = FennMuted,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 2.sp
+                    // History header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 20.dp, vertical = 22.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "YOUR CHATS",
+                                color = FennMuted,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 2.sp
+                            )
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Text(
+                                "History",
+                                color = FennWhite,
+                                fontSize = 25.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        IconButton(
+                            onClick = {
+                                scope.launch { drawerState.close() }
+                            }
+                        ) {
+                            Text("✕", color = FennMuted, fontSize = 19.sp)
+                        }
+                    }
+
+                    // New conversation
+                    Button(
+                        onClick = {
+                            viewModel.clearChat()
+                            input = ""
+                            scope.launch { drawerState.close() }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = FennWhite,
+                            contentColor = Color.Black
                         )
-                        Spacer(Modifier.height(4.dp))
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.width(9.dp))
                         Text(
-                            "History",
-                            color = FennWhite,
-                            fontSize = 25.sp,
+                            "New conversation",
                             fontWeight = FontWeight.SemiBold
                         )
                     }
 
-                    IconButton(
-                        onClick = {
-                            scope.launch { drawerState.close() }
-                        }
-                    ) {
-                        Text("✕", color = FennMuted, fontSize = 19.sp)
-                    }
-                }
+                    Spacer(Modifier.height(22.dp))
 
-                Button(
-                    onClick = {
-                        viewModel.clearChat()
-                        input = ""
-                        scope.launch { drawerState.close() }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .height(50.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = FennWhite,
-                        contentColor = Color.Black
-                    )
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(9.dp))
                     Text(
-                        "New conversation",
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-
-                Spacer(Modifier.height(22.dp))
-
-                Text(
-                    "RECENT",
-                    modifier = Modifier.padding(horizontal = 20.dp),
-                    color = FennMuted,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.8.sp
-                )
-
-                Spacer(Modifier.height(10.dp))
-
-                if (conversations.isEmpty()) {
-                    Text(
-                        "Your conversations will appear here.",
-                        modifier = Modifier.padding(20.dp),
+                        "RECENT",
+                        modifier = Modifier.padding(horizontal = 20.dp),
                         color = FennMuted,
-                        fontSize = 13.sp
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 1.8.sp
                     )
-                } else {
+
+                    Spacer(Modifier.height(10.dp))
+
+                    // Conversation list
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
                         contentPadding = PaddingValues(
                             start = 10.dp,
                             end = 10.dp,
-                            bottom = 20.dp
+                            bottom = 12.dp
                         ),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
+                        if (conversations.isEmpty()) {
+                            item {
+                                Text(
+                                    "Your conversations will appear here.",
+                                    modifier = Modifier.padding(10.dp),
+                                    color = FennMuted,
+                                    fontSize = 13.sp
+                                )
+                            }
+                        }
+
                         items(
                             items = conversations,
                             key = { it.id }
@@ -209,6 +236,39 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                 }
                             }
                         }
+                    }
+
+                    // Owner login button - fixed at the bottom
+                    HorizontalDivider(
+                        color = FennBorder,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+
+                    OutlinedButton(
+                        onClick = {
+                            scope.launch {
+                                drawerState.close()
+                                showOwnerMode = true
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            FennBorder
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = FennWhite
+                        )
+                    ) {
+                        Text(
+                            "♛   Log in as owner",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp
+                        )
                     }
                 }
             }
@@ -266,6 +326,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.7).sp
                     )
+
                     Text(
                         "AI assistant",
                         color = FennMuted,
@@ -348,7 +409,9 @@ fun ChatScreen(viewModel: ChatViewModel) {
                                             CircleShape
                                         )
                                 )
+
                                 Spacer(Modifier.width(9.dp))
+
                                 Text(
                                     "READY WHEN YOU ARE",
                                     color = FennMuted,
@@ -364,7 +427,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     MessageBubble(message)
                 }
 
-                // Custom Fenn double-cube thinking animation
                 if (loading) {
                     item(key = "fenn_thinking") {
                         FennAIThinking(
