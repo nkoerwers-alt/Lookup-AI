@@ -38,6 +38,10 @@ class ChatViewModel : ViewModel() {
     val currentConversationId: StateFlow<String> =
         _currentConversationId.asStateFlow()
 
+    private val _webSearch = MutableStateFlow(false)
+    val webSearch: StateFlow<Boolean> =
+        _webSearch.asStateFlow()
+
     private val _authState = MutableStateFlow(
         when {
             AIClient.isSignedIn() -> FennAuthState.GOOGLE
@@ -57,12 +61,21 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    fun toggleWebSearch() {
+        _webSearch.value = !_webSearch.value
+    }
+
+    fun setWebSearch(enabled: Boolean) {
+        _webSearch.value = enabled
+    }
+
     fun onGoogleSignedIn() {
         _authState.value = FennAuthState.GOOGLE
         _account.value = AIClient.getAccount()
         _messages.value = emptyList()
         _conversations.value = emptyList()
         _currentConversationId.value = UUID.randomUUID().toString()
+        _webSearch.value = false
         _error.value = null
         loadConversations()
     }
@@ -76,6 +89,7 @@ class ChatViewModel : ViewModel() {
         _messages.value = emptyList()
         _conversations.value = emptyList()
         _currentConversationId.value = UUID.randomUUID().toString()
+        _webSearch.value = false
         _error.value = null
     }
 
@@ -88,6 +102,7 @@ class ChatViewModel : ViewModel() {
         _messages.value = emptyList()
         _conversations.value = emptyList()
         _currentConversationId.value = UUID.randomUUID().toString()
+        _webSearch.value = false
         _error.value = null
     }
 
@@ -98,6 +113,8 @@ class ChatViewModel : ViewModel() {
         _error.value = null
 
         val previousMessages = _messages.value
+        val useWebSearch = _webSearch.value
+
         _messages.value = previousMessages + ChatMessage(question, true)
         _loading.value = true
 
@@ -108,7 +125,8 @@ class ChatViewModel : ViewModel() {
                 val response = AIClient.ask(
                     question = question,
                     conversationId = currentId,
-                    previousMessages = previousMessages
+                    previousMessages = previousMessages,
+                    webSearch = useWebSearch
                 )
 
                 _currentConversationId.value = response.conversationId
@@ -156,6 +174,7 @@ class ChatViewModel : ViewModel() {
 
                 _currentConversationId.value = conversation.id
                 _messages.value = conversation.messages
+                _webSearch.value = false
             } catch (e: Exception) {
                 _error.value = e.message ?: "Could not open conversation."
             }
