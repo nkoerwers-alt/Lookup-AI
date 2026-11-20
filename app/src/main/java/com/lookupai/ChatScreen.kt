@@ -1,8 +1,9 @@
-
 package com.lookupai
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Send
@@ -19,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
@@ -29,13 +32,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 
-private val FennBackground = Color(0xFF101010)
-private val FennSurface = Color(0xFF191919)
-private val FennSurfaceLight = Color(0xFF222222)
-private val FennWhite = Color(0xFFF5F5F5)
-private val FennMuted = Color(0xFF929292)
-private val FennBorder = Color(0xFF303030)
-private val FennDanger = Color(0xFFE57373)
+private val SuggestionPrompts = listOf(
+    "Explain something simply",
+    "Help me write a message",
+    "Brainstorm ideas with me",
+    "Plan my day"
+)
 
 @Composable
 fun ChatScreen(
@@ -86,7 +88,7 @@ fun ChatScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(FennBackground)
+                .background(FennColors.Background)
                 .padding(26.dp),
             contentAlignment = Alignment.Center
         ) {
@@ -94,32 +96,21 @@ fun ChatScreen(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalAlignment = Alignment.Start
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp)
-                        .background(FennWhite, RoundedCornerShape(14.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "f.",
-                        color = Color.Black,
-                        fontSize = 31.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
+                FennLogo(logoSize = 52.dp, fontSize = 34.sp)
 
                 Spacer(Modifier.height(28.dp))
 
                 Text(
                     "fenn",
-                    color = FennWhite,
+                    color = FennColors.Ink,
                     fontSize = 43.sp,
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-1.2).sp
                 )
 
                 Text(
                     "A little space to think.",
-                    color = FennMuted,
+                    color = FennColors.Muted,
                     fontSize = 16.sp
                 )
 
@@ -146,16 +137,17 @@ fun ChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
-                    shape = RoundedCornerShape(15.dp),
+                    shape = RoundedCornerShape(16.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = FennWhite,
-                        contentColor = Color.Black
+                        containerColor = FennColors.Ink,
+                        contentColor = Color.Black,
+                        disabledContainerColor = FennColors.SurfaceHigh
                     )
                 ) {
                     if (signingIn) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(20.dp),
-                            color = Color.Black,
+                            color = FennColors.Ember,
                             strokeWidth = 2.dp
                         )
                     } else {
@@ -175,13 +167,10 @@ fun ChatScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
-                    shape = RoundedCornerShape(15.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        FennBorder
-                    ),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, FennColors.Border),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = FennWhite
+                        contentColor = FennColors.Ink
                     )
                 ) {
                     Text("Continue as Guest")
@@ -191,7 +180,7 @@ fun ChatScreen(
                     Spacer(Modifier.height(14.dp))
                     Text(
                         loginError ?: "",
-                        color = FennDanger,
+                        color = FennColors.Danger,
                         fontSize = 13.sp
                     )
                 }
@@ -200,7 +189,7 @@ fun ChatScreen(
 
                 Text(
                     "Google accounts save your conversations and memories. Guest chats are temporary and are not saved to your account.",
-                    color = FennMuted,
+                    color = FennColors.Muted,
                     fontSize = 12.sp,
                     lineHeight = 19.sp
                 )
@@ -210,12 +199,9 @@ fun ChatScreen(
                 OutlinedButton(
                     onClick = { showOwnerMode = true },
                     modifier = Modifier.fillMaxWidth(),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        FennBorder
-                    ),
+                    border = BorderStroke(1.dp, FennColors.Border),
                     colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = FennMuted
+                        contentColor = FennColors.Muted
                     )
                 ) {
                     Text("Owner login")
@@ -231,8 +217,8 @@ fun ChatScreen(
         drawerContent = {
             ModalDrawerSheet(
                 modifier = Modifier.fillMaxHeight(),
-                drawerContainerColor = FennBackground,
-                drawerContentColor = FennWhite,
+                drawerContainerColor = FennColors.Background,
+                drawerContentColor = FennColors.Ink,
                 drawerShape = RoundedCornerShape(
                     topEnd = 22.dp,
                     bottomEnd = 22.dp
@@ -241,7 +227,7 @@ fun ChatScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(FennBackground)
+                        .background(FennColors.Background)
                 ) {
                     Row(
                         modifier = Modifier
@@ -255,7 +241,7 @@ fun ChatScreen(
                                     "GUEST MODE"
                                 else
                                     "YOUR CHATS",
-                                color = FennMuted,
+                                color = FennColors.Muted,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp
@@ -266,9 +252,10 @@ fun ChatScreen(
                                     "Temporary chat"
                                 else
                                     "History",
-                                color = FennWhite,
+                                color = FennColors.Ink,
                                 fontSize = 25.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.5).sp
                             )
                         }
 
@@ -277,7 +264,11 @@ fun ChatScreen(
                                 scope.launch { drawerState.close() }
                             }
                         ) {
-                            Text("✕", color = FennMuted, fontSize = 19.sp)
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Close menu",
+                                tint = FennColors.Muted
+                            )
                         }
                     }
 
@@ -293,7 +284,7 @@ fun ChatScreen(
                             .height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = FennWhite,
+                            containerColor = FennColors.Ink,
                             contentColor = Color.Black
                         )
                     ) {
@@ -311,15 +302,17 @@ fun ChatScreen(
                         Text(
                             "Guest conversations are temporary and won't appear in saved history.",
                             modifier = Modifier.padding(20.dp),
-                            color = FennMuted,
+                            color = FennColors.Muted,
                             fontSize = 13.sp,
                             lineHeight = 19.sp
                         )
+
+                        Spacer(Modifier.weight(1f))
                     } else {
                         Text(
                             "RECENT",
                             modifier = Modifier.padding(horizontal = 20.dp),
-                            color = FennMuted,
+                            color = FennColors.Muted,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.8.sp
@@ -343,7 +336,7 @@ fun ChatScreen(
                                     Text(
                                         "Your conversations will appear here.",
                                         modifier = Modifier.padding(10.dp),
-                                        color = FennMuted,
+                                        color = FennColors.Muted,
                                         fontSize = 13.sp
                                     )
                                 }
@@ -378,9 +371,9 @@ fun ChatScreen(
                                         modifier = Modifier.weight(1f),
                                         shape = RoundedCornerShape(12.dp),
                                         colors = NavigationDrawerItemDefaults.colors(
-                                            selectedContainerColor = FennSurfaceLight,
-                                            selectedTextColor = FennWhite,
-                                            unselectedTextColor = FennMuted
+                                            selectedContainerColor = FennColors.SurfaceHigh,
+                                            selectedTextColor = FennColors.Amber,
+                                            unselectedTextColor = FennColors.Muted
                                         )
                                     )
 
@@ -392,7 +385,7 @@ fun ChatScreen(
                                         Icon(
                                             Icons.Default.Delete,
                                             contentDescription = "Delete conversation",
-                                            tint = FennMuted,
+                                            tint = FennColors.Muted,
                                             modifier = Modifier.size(19.dp)
                                         )
                                     }
@@ -402,7 +395,7 @@ fun ChatScreen(
                     }
 
                     HorizontalDivider(
-                        color = FennBorder,
+                        color = FennColors.Border,
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
 
@@ -415,13 +408,13 @@ fun ChatScreen(
                             Text(
                                 account?.name?.ifBlank { "Google account" }
                                     ?: "Google account",
-                                color = FennWhite,
+                                color = FennColors.Ink,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp
                             )
                             Text(
                                 account?.email ?: "",
-                                color = FennMuted,
+                                color = FennColors.Muted,
                                 fontSize = 12.sp
                             )
 
@@ -433,12 +426,9 @@ fun ChatScreen(
                                     onSignOut()
                                 },
                                 modifier = Modifier.fillMaxWidth(),
-                                border = androidx.compose.foundation.BorderStroke(
-                                    1.dp,
-                                    FennBorder
-                                ),
+                                border = BorderStroke(1.dp, FennColors.Border),
                                 colors = ButtonDefaults.outlinedButtonColors(
-                                    contentColor = FennWhite
+                                    contentColor = FennColors.Ink
                                 )
                             ) {
                                 Text("Sign out")
@@ -455,12 +445,9 @@ fun ChatScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                1.dp,
-                                FennBorder
-                            ),
+                            border = BorderStroke(1.dp, FennColors.Border),
                             colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = FennWhite
+                                contentColor = FennColors.Ink
                             )
                         ) {
                             Text("Exit guest mode")
@@ -479,16 +466,13 @@ fun ChatScreen(
                             .padding(horizontal = 16.dp)
                             .height(50.dp),
                         shape = RoundedCornerShape(14.dp),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            FennBorder
-                        ),
+                        border = BorderStroke(1.dp, FennColors.Border),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = FennWhite
+                            contentColor = FennColors.Ink
                         )
                     ) {
                         Text(
-                            "♛   Log in as owner",
+                            "Log in as owner",
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 14.sp
                         )
@@ -502,7 +486,7 @@ fun ChatScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(FennBackground)
+                .background(FennColors.Background)
                 .padding(horizontal = 18.dp)
         ) {
             Row(
@@ -522,32 +506,20 @@ fun ChatScreen(
                     Icon(
                         Icons.Default.Menu,
                         contentDescription = "Chat menu",
-                        tint = FennWhite
+                        tint = FennColors.Ink
                     )
                 }
 
                 Spacer(Modifier.width(5.dp))
 
-                Box(
-                    modifier = Modifier
-                        .size(35.dp)
-                        .background(FennWhite, RoundedCornerShape(11.dp)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        "f.",
-                        color = Color.Black,
-                        fontSize = 23.sp,
-                        fontWeight = FontWeight.Black
-                    )
-                }
+                FennLogo(logoSize = 35.dp, fontSize = 23.sp)
 
                 Spacer(Modifier.width(11.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         "fenn",
-                        color = FennWhite,
+                        color = FennColors.Ink,
                         fontSize = 21.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.7).sp
@@ -557,7 +529,7 @@ fun ChatScreen(
                             "Guest mode"
                         else
                             "AI assistant",
-                        color = FennMuted,
+                        color = FennColors.Muted,
                         fontSize = 11.sp
                     )
                 }
@@ -565,7 +537,10 @@ fun ChatScreen(
                 IconButton(
                     onClick = { showVoiceMode = true }
                 ) {
-                    Text("🎙", fontSize = 23.sp)
+                    MicIcon(
+                        color = FennColors.Ink,
+                        iconSize = 23.dp
+                    )
                 }
 
                 IconButton(
@@ -577,12 +552,12 @@ fun ChatScreen(
                     Icon(
                         Icons.Default.Add,
                         contentDescription = "New chat",
-                        tint = FennWhite
+                        tint = FennColors.Ink
                     )
                 }
             }
 
-            HorizontalDivider(color = FennBorder)
+            HorizontalDivider(color = FennColors.Border)
 
             LazyColumn(
                 state = listState,
@@ -597,12 +572,12 @@ fun ChatScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(top = 85.dp),
+                                .padding(top = 48.dp),
                             horizontalAlignment = Alignment.Start
                         ) {
                             Text(
                                 "A LITTLE SPACE\nTO THINK.",
-                                color = FennMuted,
+                                color = FennColors.Muted,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.5.sp,
@@ -613,7 +588,7 @@ fun ChatScreen(
 
                             Text(
                                 "What's on\nyour mind?",
-                                color = FennWhite,
+                                color = FennColors.Ink,
                                 fontSize = 39.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 lineHeight = 44.sp,
@@ -624,12 +599,44 @@ fun ChatScreen(
 
                             Text(
                                 "Ideas, questions, problems.\nStart anywhere.",
-                                color = FennMuted,
+                                color = FennColors.Muted,
                                 fontSize = 15.sp,
                                 lineHeight = 23.sp
                             )
 
-                            Spacer(Modifier.height(30.dp))
+                            Spacer(Modifier.height(28.dp))
+
+                            SuggestionPrompts.forEach { prompt ->
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 9.dp)
+                                        .background(
+                                            FennColors.Surface,
+                                            RoundedCornerShape(14.dp)
+                                        )
+                                        .border(
+                                            1.dp,
+                                            FennColors.Border,
+                                            RoundedCornerShape(14.dp)
+                                        )
+                                        .clickable(enabled = !loading) {
+                                            viewModel.askAI(prompt)
+                                        }
+                                        .padding(
+                                            horizontal = 16.dp,
+                                            vertical = 14.dp
+                                        )
+                                ) {
+                                    Text(
+                                        prompt,
+                                        color = FennColors.Ink,
+                                        fontSize = 14.sp
+                                    )
+                                }
+                            }
+
+                            Spacer(Modifier.height(14.dp))
 
                             Row(
                                 verticalAlignment = Alignment.CenterVertically
@@ -638,7 +645,7 @@ fun ChatScreen(
                                     Modifier
                                         .size(7.dp)
                                         .background(
-                                            Color(0xFFAAAAAA),
+                                            FennColors.Ember,
                                             CircleShape
                                         )
                                 )
@@ -647,7 +654,7 @@ fun ChatScreen(
 
                                 Text(
                                     "READY WHEN YOU ARE",
-                                    color = FennMuted,
+                                    color = FennColors.Muted,
                                     fontSize = 10.sp,
                                     letterSpacing = 1.5.sp
                                 )
@@ -674,7 +681,7 @@ fun ChatScreen(
                     item {
                         Text(
                             error ?: "",
-                            color = FennDanger,
+                            color = FennColors.Danger,
                             fontSize = 13.sp,
                             modifier = Modifier.padding(8.dp)
                         )
@@ -682,18 +689,23 @@ fun ChatScreen(
                 }
             }
 
+            val canSend = input.isNotBlank() && !loading
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp, bottom = 10.dp)
                     .border(
                         width = 1.dp,
-                        color = FennBorder,
-                        shape = RoundedCornerShape(19.dp)
+                        color = if (input.isNotBlank())
+                            FennColors.Ember.copy(alpha = 0.45f)
+                        else
+                            FennColors.Border,
+                        shape = RoundedCornerShape(20.dp)
                     )
                     .background(
-                        FennSurface,
-                        RoundedCornerShape(19.dp)
+                        FennColors.Surface,
+                        RoundedCornerShape(20.dp)
                     )
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically
@@ -705,16 +717,16 @@ fun ChatScreen(
                         .weight(1f)
                         .padding(horizontal = 9.dp, vertical = 12.dp),
                     textStyle = TextStyle(
-                        color = FennWhite,
+                        color = FennColors.Ink,
                         fontSize = 15.sp
                     ),
-                    cursorBrush = SolidColor(FennWhite),
+                    cursorBrush = SolidColor(FennColors.Ember),
                     decorationBox = { innerTextField ->
                         Box {
                             if (input.isEmpty()) {
                                 Text(
                                     "Message Fenn...",
-                                    color = FennMuted,
+                                    color = FennColors.Muted,
                                     fontSize = 15.sp
                                 )
                             }
@@ -730,24 +742,26 @@ fun ChatScreen(
                             input = ""
                         }
                     },
-                    enabled = input.isNotBlank() && !loading,
+                    enabled = canSend,
                     modifier = Modifier
                         .size(42.dp)
                         .background(
-                            if (input.isNotBlank() && !loading)
-                                FennWhite
+                            brush = if (canSend)
+                                Brush.linearGradient(
+                                    listOf(FennColors.Ember, FennColors.Amber)
+                                )
                             else
-                                FennSurfaceLight,
-                            CircleShape
+                                SolidColor(FennColors.SurfaceHigh),
+                            shape = CircleShape
                         )
                 ) {
                     Icon(
                         Icons.Default.Send,
                         contentDescription = "Send message",
-                        tint = if (input.isNotBlank() && !loading)
-                            Color.Black
+                        tint = if (canSend)
+                            FennColors.OnAccent
                         else
-                            FennMuted,
+                            FennColors.Muted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -758,7 +772,7 @@ fun ChatScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(bottom = 9.dp),
-                color = FennMuted.copy(alpha = 0.65f),
+                color = FennColors.Muted.copy(alpha = 0.65f),
                 fontSize = 10.sp,
                 textAlign = TextAlign.Center
             )
