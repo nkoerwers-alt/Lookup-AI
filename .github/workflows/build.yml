@@ -43,6 +43,12 @@ jobs:
       - name: Build APK
         run: gradle assembleDebug
 
+      - name: Print Android Signing SHA-1
+        run: |
+          echo "========== FENN AI SIGNING REPORT =========="
+          gradle :app:signingReport
+          echo "============================================"
+
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
