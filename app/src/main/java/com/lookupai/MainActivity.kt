@@ -11,8 +11,10 @@ import androidx.compose.runtime.remember
 import androidx.credentials.CredentialManager
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.CustomCredential
+import androidx.credentials.exceptions.NoCredentialException
 import androidx.lifecycle.lifecycleScope
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import kotlinx.coroutines.launch
 
@@ -57,8 +59,9 @@ class MainActivity : ComponentActivity() {
                                     androidx.credentials.ClearCredentialStateRequest()
                                 )
                             } catch (_: Exception) {
-                                // Local sign-out still proceeds.
+                                // Continue with local sign-out.
                             }
+
                             viewModel.signOut()
                         }
                     }
@@ -68,30 +71,50 @@ class MainActivity : ComponentActivity() {
     }
 
     private suspend fun signInWithGoogle(viewModel: ChatViewModel) {
+
         val googleOption = GetGoogleIdOption.Builder()
             .setServerClientId(GOOGLE_WEB_CLIENT_ID)
             .setFilterByAuthorizedAccounts(false)
             .build()
 
-        val request = GetCredentialRequest.Builder()
+        val normalRequest = GetCredentialRequest.Builder()
             .addCredentialOption(googleOption)
             .build()
 
-        val result = credentialManager.getCredential(
-            context = this,
-            request = request
-        )
+        val result = try {
+            credentialManager.getCredential(
+                context = this,
+                request = normalRequest
+            )
+        } catch (_: NoCredentialException) {
+
+            // Fallback: explicitly display Google's sign-in flow.
+            val signInOption = GetSignInWithGoogleOption.Builder(
+                serverClientId = GOOGLE_WEB_CLIENT_ID
+            ).build()
+
+            val fallbackRequest = GetCredentialRequest.Builder()
+                .addCredentialOption(signInOption)
+                .build()
+
+            credentialManager.getCredential(
+                context = this,
+                request = fallbackRequest
+            )
+        }
 
         val credential = result.credential
 
         if (
             credential is CustomCredential &&
-            credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+            credential.type ==
+            GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
         ) {
             val googleCredential =
                 GoogleIdTokenCredential.createFrom(credential.data)
 
             AIClient.signInWithGoogle(googleCredential.idToken)
+
             viewModel.onGoogleSignedIn()
         } else {
             throw Exception("Google did not return a valid ID token.")
