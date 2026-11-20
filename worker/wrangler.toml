@@ -1,6 +1,10 @@
+
 name = "lookup-ai-backend"
 main = "index.js"
 compatibility_date = "2026-10-03"
+
+[vars]
+GOOGLE_WEB_CLIENT_ID = "221027867375-rjbep5bfv4208ercuacb2htgrvdifvkf.apps.googleusercontent.com"
 
 [[d1_databases]]
 binding = "DB"
