@@ -198,12 +198,14 @@ object AIClient {
     suspend fun ask(
         question: String,
         conversationId: String,
-        previousMessages: List<ChatMessage> = emptyList()
+        previousMessages: List<ChatMessage> = emptyList(),
+        webSearch: Boolean = false
     ): AIReply {
 
         val body = JSONObject().apply {
             put("question", question)
             put("conversationId", conversationId)
+            put("webSearch", webSearch)
 
             if (isGuest()) {
                 val history = JSONArray()
