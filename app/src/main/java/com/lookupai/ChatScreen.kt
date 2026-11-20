@@ -38,16 +38,24 @@ private val FennBorder = Color(0xFF303030)
 private val FennDanger = Color(0xFFE57373)
 
 @Composable
-fun ChatScreen(viewModel: ChatViewModel) {
+fun ChatScreen(
+    viewModel: ChatViewModel,
+    onGoogleSignIn: suspend () -> Unit,
+    onSignOut: () -> Unit
+) {
     val messages by viewModel.messages.collectAsState()
     val loading by viewModel.loading.collectAsState()
     val error by viewModel.error.collectAsState()
     val conversations by viewModel.conversations.collectAsState()
     val currentConversationId by viewModel.currentConversationId.collectAsState()
+    val authState by viewModel.authState.collectAsState()
+    val account by viewModel.account.collectAsState()
 
     var input by remember { mutableStateOf("") }
     var showOwnerMode by remember { mutableStateOf(false) }
     var showVoiceMode by remember { mutableStateOf(false) }
+    var signingIn by remember { mutableStateOf(false) }
+    var loginError by remember { mutableStateOf<String?>(null) }
 
     val listState = rememberLazyListState()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -61,10 +69,6 @@ fun ChatScreen(viewModel: ChatViewModel) {
         }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.loadConversations()
-    }
-
     if (showOwnerMode) {
         OwnerMode(onClose = { showOwnerMode = false })
         return
@@ -75,6 +79,149 @@ fun ChatScreen(viewModel: ChatViewModel) {
             viewModel = viewModel,
             onClose = { showVoiceMode = false }
         )
+        return
+    }
+
+    if (authState == FennAuthState.SIGNED_OUT) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(FennBackground)
+                .padding(26.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.Start
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(FennWhite, RoundedCornerShape(14.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "f.",
+                        color = Color.Black,
+                        fontSize = 31.sp,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+
+                Spacer(Modifier.height(28.dp))
+
+                Text(
+                    "fenn",
+                    color = FennWhite,
+                    fontSize = 43.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Text(
+                    "A little space to think.",
+                    color = FennMuted,
+                    fontSize = 16.sp
+                )
+
+                Spacer(Modifier.height(40.dp))
+
+                Button(
+                    onClick = {
+                        if (!signingIn) {
+                            signingIn = true
+                            loginError = null
+                            scope.launch {
+                                try {
+                                    onGoogleSignIn()
+                                } catch (e: Exception) {
+                                    loginError =
+                                        e.message ?: "Google sign-in failed."
+                                } finally {
+                                    signingIn = false
+                                }
+                            }
+                        }
+                    },
+                    enabled = !signingIn,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = FennWhite,
+                        contentColor = Color.Black
+                    )
+                ) {
+                    if (signingIn) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = Color.Black,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            "Continue with Google",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.continueAsGuest()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        FennBorder
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = FennWhite
+                    )
+                ) {
+                    Text("Continue as Guest")
+                }
+
+                if (loginError != null) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        loginError ?: "",
+                        color = FennDanger,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(Modifier.height(25.dp))
+
+                Text(
+                    "Google accounts save your conversations and memories. Guest chats are temporary and are not saved to your account.",
+                    color = FennMuted,
+                    fontSize = 12.sp,
+                    lineHeight = 19.sp
+                )
+
+                Spacer(Modifier.height(35.dp))
+
+                OutlinedButton(
+                    onClick = { showOwnerMode = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        FennBorder
+                    ),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = FennMuted
+                    )
+                ) {
+                    Text("Owner login")
+                }
+            }
+        }
         return
     }
 
@@ -104,7 +251,10 @@ fun ChatScreen(viewModel: ChatViewModel) {
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                "YOUR CHATS",
+                                if (authState == FennAuthState.GUEST)
+                                    "GUEST MODE"
+                                else
+                                    "YOUR CHATS",
                                 color = FennMuted,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
@@ -112,7 +262,10 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             )
                             Spacer(Modifier.height(4.dp))
                             Text(
-                                "History",
+                                if (authState == FennAuthState.GUEST)
+                                    "Temporary chat"
+                                else
+                                    "History",
                                 color = FennWhite,
                                 fontSize = 25.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -154,84 +307,95 @@ fun ChatScreen(viewModel: ChatViewModel) {
 
                     Spacer(Modifier.height(22.dp))
 
-                    Text(
-                        "RECENT",
-                        modifier = Modifier.padding(horizontal = 20.dp),
-                        color = FennMuted,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.8.sp
-                    )
+                    if (authState == FennAuthState.GUEST) {
+                        Text(
+                            "Guest conversations are temporary and won't appear in saved history.",
+                            modifier = Modifier.padding(20.dp),
+                            color = FennMuted,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp
+                        )
+                    } else {
+                        Text(
+                            "RECENT",
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            color = FennMuted,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.8.sp
+                        )
 
-                    Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(10.dp))
 
-                    LazyColumn(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        contentPadding = PaddingValues(
-                            start = 10.dp,
-                            end = 10.dp,
-                            bottom = 12.dp
-                        ),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (conversations.isEmpty()) {
-                            item {
-                                Text(
-                                    "Your conversations will appear here.",
-                                    modifier = Modifier.padding(10.dp),
-                                    color = FennMuted,
-                                    fontSize = 13.sp
-                                )
+                        LazyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            contentPadding = PaddingValues(
+                                start = 10.dp,
+                                end = 10.dp,
+                                bottom = 12.dp
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (conversations.isEmpty()) {
+                                item {
+                                    Text(
+                                        "Your conversations will appear here.",
+                                        modifier = Modifier.padding(10.dp),
+                                        color = FennMuted,
+                                        fontSize = 13.sp
+                                    )
+                                }
                             }
-                        }
 
-                        items(
-                            items = conversations,
-                            key = { it.id }
-                        ) { conversation ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                NavigationDrawerItem(
-                                    label = {
-                                        Text(
-                                            conversation.title.ifBlank {
-                                                "New conversation"
-                                            },
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            fontSize = 13.sp
-                                        )
-                                    },
-                                    selected = currentConversationId == conversation.id,
-                                    onClick = {
-                                        viewModel.openConversation(conversation.id)
-                                        input = ""
-                                        scope.launch { drawerState.close() }
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = NavigationDrawerItemDefaults.colors(
-                                        selectedContainerColor = FennSurfaceLight,
-                                        selectedTextColor = FennWhite,
-                                        unselectedTextColor = FennMuted
-                                    )
-                                )
-
-                                IconButton(
-                                    onClick = {
-                                        viewModel.deleteConversation(conversation.id)
-                                    }
+                            items(
+                                items = conversations,
+                                key = { it.id }
+                            ) { conversation ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Delete conversation",
-                                        tint = FennMuted,
-                                        modifier = Modifier.size(19.dp)
+                                    NavigationDrawerItem(
+                                        label = {
+                                            Text(
+                                                conversation.title.ifBlank {
+                                                    "New conversation"
+                                                },
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                fontSize = 13.sp
+                                            )
+                                        },
+                                        selected = currentConversationId ==
+                                            conversation.id,
+                                        onClick = {
+                                            viewModel.openConversation(conversation.id)
+                                            input = ""
+                                            scope.launch { drawerState.close() }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = NavigationDrawerItemDefaults.colors(
+                                            selectedContainerColor = FennSurfaceLight,
+                                            selectedTextColor = FennWhite,
+                                            unselectedTextColor = FennMuted
+                                        )
                                     )
+
+                                    IconButton(
+                                        onClick = {
+                                            viewModel.deleteConversation(conversation.id)
+                                        }
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Delete conversation",
+                                            tint = FennMuted,
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -242,6 +406,67 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         modifier = Modifier.padding(horizontal = 16.dp)
                     )
 
+                    if (authState == FennAuthState.GOOGLE) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 18.dp, vertical = 14.dp)
+                        ) {
+                            Text(
+                                account?.name?.ifBlank { "Google account" }
+                                    ?: "Google account",
+                                color = FennWhite,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                account?.email ?: "",
+                                color = FennMuted,
+                                fontSize = 12.sp
+                            )
+
+                            Spacer(Modifier.height(10.dp))
+
+                            OutlinedButton(
+                                onClick = {
+                                    scope.launch { drawerState.close() }
+                                    onSignOut()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.dp,
+                                    FennBorder
+                                ),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = FennWhite
+                                )
+                            ) {
+                                Text("Sign out")
+                            }
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = {
+                                scope.launch {
+                                    drawerState.close()
+                                    onSignOut()
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                FennBorder
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = FennWhite
+                            )
+                        ) {
+                            Text("Exit guest mode")
+                        }
+                    }
+
                     OutlinedButton(
                         onClick = {
                             scope.launch {
@@ -251,7 +476,7 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 14.dp)
+                            .padding(horizontal = 16.dp)
                             .height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         border = androidx.compose.foundation.BorderStroke(
@@ -268,6 +493,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
                             fontSize = 14.sp
                         )
                     }
+
+                    Spacer(Modifier.height(12.dp))
                 }
             }
         }
@@ -286,13 +513,15 @@ fun ChatScreen(viewModel: ChatViewModel) {
             ) {
                 IconButton(
                     onClick = {
-                        viewModel.loadConversations()
+                        if (authState == FennAuthState.GOOGLE) {
+                            viewModel.loadConversations()
+                        }
                         scope.launch { drawerState.open() }
                     }
                 ) {
                     Icon(
                         Icons.Default.Menu,
-                        contentDescription = "Chat history",
+                        contentDescription = "Chat menu",
                         tint = FennWhite
                     )
                 }
@@ -324,7 +553,10 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         letterSpacing = (-0.7).sp
                     )
                     Text(
-                        "AI assistant",
+                        if (authState == FennAuthState.GUEST)
+                            "Guest mode"
+                        else
+                            "AI assistant",
                         color = FennMuted,
                         fontSize = 11.sp
                     )
@@ -504,7 +736,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         .background(
                             if (input.isNotBlank() && !loading)
                                 FennWhite
-                            else FennSurfaceLight,
+                            else
+                                FennSurfaceLight,
                             CircleShape
                         )
                 ) {
@@ -513,7 +746,8 @@ fun ChatScreen(viewModel: ChatViewModel) {
                         contentDescription = "Send message",
                         tint = if (input.isNotBlank() && !loading)
                             Color.Black
-                        else FennMuted,
+                        else
+                            FennMuted,
                         modifier = Modifier.size(18.dp)
                     )
                 }
