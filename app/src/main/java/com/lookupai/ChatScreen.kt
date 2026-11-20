@@ -1,3 +1,4 @@
+
 package com.lookupai
 
 import androidx.compose.foundation.BorderStroke
@@ -52,6 +53,7 @@ fun ChatScreen(
     val currentConversationId by viewModel.currentConversationId.collectAsState()
     val authState by viewModel.authState.collectAsState()
     val account by viewModel.account.collectAsState()
+    val webSearch by viewModel.webSearch.collectAsState()
 
     var input by remember { mutableStateOf("") }
     var showOwnerMode by remember { mutableStateOf(false) }
@@ -672,7 +674,10 @@ fun ChatScreen(
                         FennAIThinking(
                             cubeSize = 30.dp,
                             name = "fenn",
-                            message = " is thinking..."
+                            message = if (webSearch)
+                                " is searching the web..."
+                            else
+                                " is thinking..."
                         )
                     }
                 }
@@ -689,12 +694,39 @@ fun ChatScreen(
                 }
             }
 
+            // Fenn Web / Normal Chat mode selector
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp, bottom = 9.dp),
+                horizontalArrangement = Arrangement.spacedBy(9.dp)
+            ) {
+                ModeButton(
+                    text = "Normal Chat",
+                    selected = !webSearch,
+                    enabled = !loading,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.setWebSearch(false)
+                    }
+                )
+
+                ModeButton(
+                    text = "Fenn Web",
+                    selected = webSearch,
+                    enabled = !loading,
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        viewModel.setWebSearch(true)
+                    }
+                )
+            }
+
             val canSend = input.isNotBlank() && !loading
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp, bottom = 10.dp)
                     .border(
                         width = 1.dp,
                         color = if (input.isNotBlank())
@@ -771,11 +803,57 @@ fun ChatScreen(
                 "Fenn can make mistakes. Check important information.",
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 9.dp),
+                    .padding(top = 9.dp, bottom = 9.dp),
                 color = FennColors.Muted.copy(alpha = 0.65f),
                 fontSize = 10.sp,
                 textAlign = TextAlign.Center
             )
         }
+    }
+}
+
+@Composable
+private fun ModeButton(
+    text: String,
+    selected: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val backgroundColor = if (selected) {
+        if (text == "Fenn Web") FennColors.Ember else FennColors.SurfaceHigh
+    } else {
+        FennColors.Surface
+    }
+
+    val contentColor = if (selected && text == "Fenn Web") {
+        FennColors.OnAccent
+    } else {
+        FennColors.Ink
+    }
+
+    Box(
+        modifier = modifier
+            .height(43.dp)
+            .background(
+                backgroundColor,
+                RoundedCornerShape(13.dp)
+            )
+            .border(
+                width = 1.dp,
+                color = if (selected) FennColors.Ember.copy(alpha = 0.65f)
+                else FennColors.Border,
+                shape = RoundedCornerShape(13.dp)
+            )
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = text,
+            color = if (enabled) contentColor else FennColors.Muted,
+            fontSize = 13.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+        )
     }
 }
