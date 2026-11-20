@@ -9,6 +9,12 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
 
+enum class FennAuthState {
+    SIGNED_OUT,
+    GUEST,
+    GOOGLE
+}
+
 class ChatViewModel : ViewModel() {
 
     private val _messages =
@@ -32,22 +38,78 @@ class ChatViewModel : ViewModel() {
     val currentConversationId: StateFlow<String> =
         _currentConversationId.asStateFlow()
 
+    private val _authState = MutableStateFlow(
+        when {
+            AIClient.isSignedIn() -> FennAuthState.GOOGLE
+            AIClient.isGuest() -> FennAuthState.GUEST
+            else -> FennAuthState.SIGNED_OUT
+        }
+    )
+    val authState: StateFlow<FennAuthState> =
+        _authState.asStateFlow()
+
+    private val _account = MutableStateFlow(AIClient.getAccount())
+    val account: StateFlow<FennAccount?> = _account.asStateFlow()
+
     init {
+        if (_authState.value == FennAuthState.GOOGLE) {
+            loadConversations()
+        }
+    }
+
+    fun onGoogleSignedIn() {
+        _authState.value = FennAuthState.GOOGLE
+        _account.value = AIClient.getAccount()
+        _messages.value = emptyList()
+        _conversations.value = emptyList()
+        _currentConversationId.value = UUID.randomUUID().toString()
+        _error.value = null
         loadConversations()
+    }
+
+    fun continueAsGuest() {
+        if (_loading.value) return
+
+        AIClient.startGuestMode()
+        _authState.value = FennAuthState.GUEST
+        _account.value = null
+        _messages.value = emptyList()
+        _conversations.value = emptyList()
+        _currentConversationId.value = UUID.randomUUID().toString()
+        _error.value = null
+    }
+
+    fun signOut() {
+        if (_loading.value) return
+
+        AIClient.signOut()
+        _authState.value = FennAuthState.SIGNED_OUT
+        _account.value = null
+        _messages.value = emptyList()
+        _conversations.value = emptyList()
+        _currentConversationId.value = UUID.randomUUID().toString()
+        _error.value = null
     }
 
     fun askAI(question: String) {
         if (question.isBlank() || _loading.value) return
+        if (_authState.value == FennAuthState.SIGNED_OUT) return
 
         _error.value = null
-        _messages.value += ChatMessage(question, true)
+
+        val previousMessages = _messages.value
+        _messages.value = previousMessages + ChatMessage(question, true)
         _loading.value = true
 
         val currentId = _currentConversationId.value
 
         viewModelScope.launch {
             try {
-                val response = AIClient.ask(question, currentId)
+                val response = AIClient.ask(
+                    question = question,
+                    conversationId = currentId,
+                    previousMessages = previousMessages
+                )
 
                 _currentConversationId.value = response.conversationId
 
@@ -56,7 +118,9 @@ class ChatViewModel : ViewModel() {
                     isUser = false
                 )
 
-                loadConversations()
+                if (_authState.value == FennAuthState.GOOGLE) {
+                    loadConversations()
+                }
             } catch (e: Exception) {
                 _error.value = e.message ?: "Something went wrong."
             } finally {
@@ -66,6 +130,11 @@ class ChatViewModel : ViewModel() {
     }
 
     fun loadConversations() {
+        if (_authState.value != FennAuthState.GOOGLE) {
+            _conversations.value = emptyList()
+            return
+        }
+
         viewModelScope.launch {
             try {
                 _conversations.value = AIClient.getConversations()
@@ -76,7 +145,9 @@ class ChatViewModel : ViewModel() {
     }
 
     fun openConversation(id: String) {
-        if (_loading.value) return
+        if (_loading.value ||
+            _authState.value != FennAuthState.GOOGLE
+        ) return
 
         viewModelScope.launch {
             try {
@@ -92,6 +163,8 @@ class ChatViewModel : ViewModel() {
     }
 
     fun deleteConversation(id: String) {
+        if (_authState.value != FennAuthState.GOOGLE) return
+
         viewModelScope.launch {
             try {
                 AIClient.deleteConversation(id)
@@ -116,6 +189,11 @@ class ChatViewModel : ViewModel() {
     }
 
     fun loadMemories(onResult: (List<String>) -> Unit) {
+        if (_authState.value != FennAuthState.GOOGLE) {
+            onResult(emptyList())
+            return
+        }
+
         viewModelScope.launch {
             try {
                 onResult(AIClient.getMemories())
@@ -126,6 +204,8 @@ class ChatViewModel : ViewModel() {
     }
 
     fun deleteMemories() {
+        if (_authState.value != FennAuthState.GOOGLE) return
+
         viewModelScope.launch {
             try {
                 AIClient.deleteMemories()
